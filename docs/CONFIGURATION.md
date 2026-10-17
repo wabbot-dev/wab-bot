@@ -7,6 +7,7 @@ Endpoints, MCP tools, send guards and environment variables. Names only: values 
 | Route | Auth | Notes |
 |---|---|---|
 | `GET /` | none | health page, 200 `ok` |
+| `GET /api/health` | none | liveness: 200 `{"ok":true,"version":"<package version>"}` only (no secret, count or message data; no storage read; `Cache-Control: no-store`). 405 for other methods except `HEAD` |
 | `GET /api/webhook` | `hub.verify_token` = `WA_VERIFY_TOKEN` | Meta handshake: 200 echo of `hub.challenge`, else 403 |
 | `POST /api/webhook` | `X-Hub-Signature-256` HMAC (`WA_APP_SECRET`) over the **raw body bytes**, constant-time compare | 200 `{ok:true}`, 401 invalid signature (no storage touched), 400 bad json, **503 + `Retry-After: 2`** if the store stayed contended for the whole ~8 s retry budget (nothing applied), 500 real store/config error. Meta redelivers on non-200; wamid dedupe makes redelivery idempotent |
 | `POST /mcp` | `Bearer MCP_TOKEN` | stateless MCP over Streamable HTTP (JSON responses, no SSE, no sessions); `GET`/`DELETE` answer 405 after auth |

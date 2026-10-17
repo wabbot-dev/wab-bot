@@ -21,6 +21,7 @@ The maintainer will acknowledge the report, assess its scope and coordinate reme
 - Webhook POSTs are accepted only with a valid `X-Hub-Signature-256` (HMAC-SHA256 of the raw body, constant-time compare).
 - `/mcp`, `/api/admin*` and the cron route require their own bearer secrets (min 16 chars, constant-time compare, fail closed when unset).
 - `POST /api/setup` (self-provisioning) works once: constant-time nonce check, validation before the atomic claim in the Durable Object, then 403 forever; values are stored in Durable Object SQLite (no extra application-level encryption: the Cloudflare account is the trust boundary), never logged or returned. A real Worker binding always wins over a stored value. Details and limits: [docs/SELF-PROVISIONING.md](docs/SELF-PROVISIONING.md).
+- `GET /api/health` is unauthenticated and static: it returns only `{ok, version}` (the package version, which is public in this repository), reads no storage and no secret, and carries no counts or message data.
 - The agent's MCP token can call `get_overview`, a read-only health snapshot (counts, ages, secret NAMES and sources, never values, message text, numbers or leases); no MCP tool can change controls or delete data.
 - The agent never receives the WhatsApp access token; the bridge sends on its behalf and enforces every send guard server-side.
 - Logs carry IDs and counters only: no message bodies, names, phone numbers or tokens.

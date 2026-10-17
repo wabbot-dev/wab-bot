@@ -37,6 +37,7 @@ check() { if [ "$2" = "$3" ]; then echo "PASS $1 ($3)"; else echo "FAIL $1 (expe
 code() { curl -s -o /dev/null -w '%{http_code}' --max-time 20 "$@"; }
 
 check "GET /"                                   200 "$(code "$BASE/")"
+check "GET /api/health"                         200 "$(code "$BASE/api/health")"
 check "handshake: right token echoes challenge" "424242" "$(curl -s --max-time 20 "$BASE/api/webhook?hub.mode=subscribe&hub.verify_token=$VERIFY&hub.challenge=424242")"
 check "handshake: wrong token"                  403 "$(code "$BASE/api/webhook?hub.mode=subscribe&hub.verify_token=definitely-wrong-token&hub.challenge=1")"
 PAYLOAD='{"object":"whatsapp_business_account","entry":[{"id":"2000000000002","changes":[{"field":"messages","value":{"messaging_product":"whatsapp","metadata":{"display_phone_number":"15551000000","phone_number_id":"1000000000001"},"contacts":[{"profile":{"name":"Smoke Customer"},"wa_id":"15550001111"}],"messages":[{"id":"wamid.SMOKE1","from":"15550001111","type":"text","timestamp":"1760000000","text":{"body":"hello from the smoke test"}}]}}]}]}'

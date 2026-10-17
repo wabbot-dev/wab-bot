@@ -1,3 +1,4 @@
+import pkg from "../package.json" with { type: "json" };
 import { adminErase, adminGet, adminPost } from "../lib/admin";
 import { handleCron } from "../lib/cron";
 import { createAdminMcpRoute } from "../lib/admin-mcp";
@@ -68,7 +69,7 @@ async function route(req: Request, env: Env, exec: ExecutionContext): Promise<Re
   const m = req.method;
 
   // Self-provisioned credentials must be loaded before any config is built. Static pages and /api/setup do not need them.
-  if (path !== "/" && path !== "/admin" && path !== "/api/setup" && path !== "/api/admin/secrets") await ensureSecrets(env);
+  if (path !== "/" && path !== "/api/health" && path !== "/admin" && path !== "/api/setup" && path !== "/api/admin/secrets") await ensureSecrets(env);
 
   const erase = /^\/api\/admin\/conversations\/([^/]+)$/.exec(path);
   if (erase) return m === "DELETE" ? adminErase(ctx(), req, erase[1]!) : methodNotAllowed("DELETE"); // no decoding: a valid id is plain [a-z0-9_]
@@ -80,6 +81,8 @@ async function route(req: Request, env: Env, exec: ExecutionContext): Promise<Re
       return handleAdminSecrets(env, req);
     case "/":
       return m === "GET" || m === "HEAD" ? html(HEALTH_HTML) : methodNotAllowed("GET, HEAD");
+    case "/api/health": // liveness only: no secrets, counts or message data, and no storage read
+      return m === "GET" || m === "HEAD" ? new Response(JSON.stringify({ ok: true, version: pkg.version }), { status: 200, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } }) : methodNotAllowed("GET, HEAD");
     case "/admin":
       return m === "GET" || m === "HEAD" ? html(ADMIN_HTML, ADMIN_PAGE_HEADERS) : methodNotAllowed("GET, HEAD");
     case "/api/webhook":

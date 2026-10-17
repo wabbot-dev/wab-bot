@@ -159,6 +159,23 @@ describe("pages, headers, routing", () => {
     expect((await call("/", { method: "POST" })).status).toBe(405);
     expect(BASE).toContain("https://");
   });
+  it("GET /api/health is a cheap liveness check: 200 {ok, version} only, no secret or data, other methods 405", async () => {
+    const r = await call("/api/health");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("content-type")).toContain("application/json");
+    expect(r.headers.get("cache-control")).toBe("no-store");
+    expect(r.headers.get("x-content-type-options")).toBe("nosniff");
+    const raw = await r.text();
+    const body = JSON.parse(raw) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(["ok", "version"]);
+    expect(body.ok).toBe(true);
+    expect(body.version).toMatch(/^\d+\.\d+\.\d+/);
+    for (const v of [ADMIN_TOKEN, MCP_TOKEN, APP_SECRET, CRON_SECRET]) expect(raw).not.toContain(v);
+    expect((await call("/api/health", { method: "HEAD" })).status).toBe(200);
+    expect((await call("/api/health", { method: "POST", body: "{}" })).status).toBe(405);
+    expect((await call("/api/health/")).status).toBe(200); // same trailing-slash rule as every other route
+    expect(net.calls).toHaveLength(0);
+  });
   it("the page source contains no token or secret values", async () => {
     const t = await (await call("/admin")).text();
     for (const v of [ADMIN_TOKEN, MCP_TOKEN, APP_SECRET, CRON_SECRET]) expect(t).not.toContain(v);
