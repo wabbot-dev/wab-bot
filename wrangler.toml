@@ -1,0 +1,33 @@
+# Cloudflare Worker + Durable Object (SQLite). PLACEHOLDERS ONLY: no account id, no secret values are stored in this file.
+# Secrets are set with `wrangler secret put` (scripts/deploy-cloudflare.sh does it from stdin; see docs/DEPLOY.md).
+name = "wab-bot"            # becomes <name>.<your-subdomain>.workers.dev; change per business
+main = "src/worker.ts"
+compatibility_date = "2026-10-01"
+compatibility_flags = ["nodejs_compat", "global_fetch_strictly_public"]  # the second flag lets WAKE_URL point at another Worker on your own workers.dev (otherwise error 1042)
+workers_dev = true                  # use the free *.workers.dev URL; no custom domain needed
+minify = false
+
+# account_id is intentionally NOT set: wrangler uses the account you logged in with.
+# If your login can see several accounts, run with CLOUDFLARE_ACCOUNT_ID=<your account id> in the environment.
+
+[observability]
+enabled = true                      # Workers Logs (free allowance applies). The bridge logs ids/counters only, never message text.
+
+[durable_objects]
+bindings = [{ name = "STATE", class_name = "BridgeState" }, { name = "CALLS", class_name = "CallSession" }]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BridgeState"]   # SQLite-backed Durable Objects are the free-plan kind
+
+[[migrations]]
+tag = "v2"                          # one Durable Object per voice call (docs/VOICE-CALLS.md); idle and free of charge unless calling is armed
+new_sqlite_classes = ["CallSession"]
+
+[triggers]
+crons = ["0 5 * * *"]               # daily 05:00 UTC wake-retry pass
+
+# Non-secret settings can go in [vars]. Leave empty here; defaults live in lib/config.ts. Example:
+# [vars]
+# LAUNCH_MODE = "test"
+# GRAPH_VERSION = "v25.0"

@@ -1,0 +1,43 @@
+name: PR readiness
+
+# Runs on pull_request_target so it can write a commit status on PRs from forks. It checks out the DEFAULT branch only
+# (never the PR's code), reads PR metadata, and publishes a status. It never runs contributor-controlled code.
+on:
+  pull_request_target:
+    branches: [main, "release/*"]
+    types: [opened, edited, synchronize, reopened, ready_for_review, converted_to_draft]
+  workflow_dispatch:
+    inputs:
+      pull_request_number:
+        description: Open PR to recheck
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: pr-readiness-${{ github.event.pull_request.number || inputs.pull_request_number }}
+  cancel-in-progress: true
+
+jobs:
+  readiness:
+    name: Validate author declaration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      pull-requests: read
+      statuses: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Check initial readiness
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { pathToFileURL } = require("node:url");
+            const entry = pathToFileURL(`${process.env.GITHUB_WORKSPACE}/scripts/ci/pr-readiness.mjs`);
+            const { runReadinessCheck } = await import(entry.href);
+            await runReadinessCheck({ github, context, core });

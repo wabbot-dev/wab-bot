@@ -1,0 +1,54 @@
+{
+  "name": "wab-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WAB bot: AI auto-reply and voice answering for business chat on the WhatsApp Cloud API, on Cloudflare Workers (one SQLite Durable Object): one business, one AI agent over MCP. One deploy per business, own Cloudflare account, own secrets.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "whatsapp",
+    "whatsapp-cloud-api",
+    "mcp",
+    "cloudflare-workers",
+    "durable-objects",
+    "webhook",
+    "ai-agent"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.worker.json && tsc --noEmit -p tests/workers/tsconfig.json",
+    "test:logic": "node --import tsx --test \"tests/*.test.ts\"",
+    "test:workers": "vitest run --config vitest.config.ts",
+    "test": "npm run test:logic && npm run test:workers",
+    "check": "npm run typecheck && npm test && npm run docs:check",
+    "build": "wrangler deploy --dry-run --outdir .wrangler-dist",
+    "smoke": "bash scripts/smoke.sh",
+    "smoke:local": "bash scripts/smoke-local.sh",
+    "deploy": "bash scripts/deploy-cloudflare.sh",
+    "meta-setup": "node scripts/meta-setup.mjs",
+    "hygiene": "bash scripts/hygiene-scan.sh",
+    "hygiene:selftest": "bash scripts/hygiene-selftest.sh",
+    "docs:check": "node scripts/check-docs.mjs"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.4",
+    "@cloudflare/workers-types": "^5.20261016.1",
+    "@types/node": "^22.20.5",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5",
+    "wrangler": "^4.151.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/wabbot-dev/wab-bot.git"
+  },
+  "bugs": {
+    "url": "https://github.com/wabbot-dev/wab-bot/issues"
+  },
+  "homepage": "https://github.com/wabbot-dev/wab-bot#readme"
+}

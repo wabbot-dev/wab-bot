@@ -1,0 +1,94 @@
+name: Bug report
+description: Report a problem with observations or source evidence
+title: "[Bug] "
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Report one primary behaviour per issue and keep answers grounded in evidence. Distinguish observed behaviour, source-derived
+        reasoning and suspected causes; do not claim a reproduction you did not run. If a narrative answer is not known, write
+        `NOT_ENOUGH_INFO` and say what is missing. **Never paste tokens, app secrets, phone numbers or message text.** Security
+        problems: use the private report link, not this form.
+  - type: checkboxes
+    id: before-submitting
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched the open and closed issues for a related report.
+          required: true
+        - label: I removed tokens, secrets, phone numbers, customer names and message text from everything below.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Release or commit
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Deploy or teardown scripts
+        - Webhook receiver
+        - MCP tools or send guards
+        - Admin console or admin API
+        - Self-provisioning secrets
+        - Meta setup route or script
+        - Retention, privacy or erase
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: The actual result with the exact request or command (redacted) and the HTTP status or error string.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: The shortest steps you actually ran. Say how often it reproduced. If unavailable, say so.
+      placeholder: |
+        1. Deploy ...
+        2. Send ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: Cite the documentation page or source line; mark an unverified expectation clearly.
+    validations:
+      required: true
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Where did you observe it?
+      options:
+        - Local tests (npm run check)
+        - wrangler dev --local
+        - A deployed Cloudflare Worker, fake secrets only
+        - A deployed Cloudflare Worker with a real Meta test number
+        - A deployed Cloudflare Worker with a real business number
+        - Source reading only
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact and scope
+      description: Observed impact and frequency (message lost, duplicated, sent twice, data exposed). Leave untested scope unknown.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Redacted log lines (ids and counters only), test output or a source reference.

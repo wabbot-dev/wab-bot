@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/wabbot-dev/wab-bot/security/advisories/new
+    about: Private report. Do not open a public issue for a vulnerability, and never paste tokens, app secrets, phone numbers or message text.
+  - name: Contribution scope and integration requirements
+    url: https://github.com/wabbot-dev/wab-bot/blob/main/CONTRIBUTING.md#contribution-scope
+    about: Check what is in scope, what is excluded and the fail-closed rule before proposing a feature.
+  - name: Documentation
+    url: https://github.com/wabbot-dev/wab-bot#readme
+    about: Read the README, docs/STATUS.md (what is verified) and docs/TROUBLESHOOTING.md first.

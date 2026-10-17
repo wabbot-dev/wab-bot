@@ -1,0 +1,48 @@
+# Zero-cost CI: standard GitHub-hosted runners are free for PUBLIC repositories. Do not enable on a private repo
+# without checking the minutes allowance, and do not add self-hosted or larger runners.
+# No Cloudflare, Meta or provider credentials are used or needed: every test uses fakes.
+name: ci
+on:
+  push: { branches: [main] }
+  pull_request:
+    branches: [main, "release/*"]
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    name: check (typecheck, tests, docs)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check
+      - run: npm run build
+      - run: npm run smoke:local
+  hygiene:
+    name: hygiene (secrets, personal data, stale references)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - run: bash scripts/hygiene-selftest.sh
+      - run: bash scripts/hygiene-scan.sh
+  audit:
+    name: npm audit (advisory)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+        with: { persist-credentials: false }
+      - uses: actions/setup-node@v4
+        with: { node-version-file: .nvmrc, cache: npm }
+      - run: npm ci --no-audit --no-fund
+      - run: npm audit --audit-level=high

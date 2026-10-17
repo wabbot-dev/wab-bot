@@ -1,0 +1,51 @@
+name: Feature request
+description: Propose a capability, starting from the problem
+title: "[Feature] "
+labels: [enhancement, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start from the problem and the outcome you need. Ideas without measurements are welcome. Check the
+        [contribution scope](https://github.com/wabbot-dev/wab-bot/blob/main/CONTRIBUTING.md#contribution-scope)
+        and [roadmap](https://github.com/wabbot-dev/wab-bot/blob/main/docs/ROADMAP.md) first. Requests for spam,
+        bulk messaging, bypassing Meta's rules or reselling provider accounts are out of scope.
+  - type: checkboxes
+    id: before-submitting
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues for a similar request.
+          required: true
+        - label: This request contains no credentials, phone numbers or customer message text.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Examples, prior art or evidence
+      description: Label what you observed versus what you assume.
+  - type: dropdown
+    id: effects
+    attributes:
+      label: Expected effects
+      multiple: true
+      options:
+        - Reads or writes stored conversation data
+        - Sends or can cause a WhatsApp message
+        - Changes who can access data
+        - Contacts a new network service
+        - Creates or changes a provider account, billing or deployment
+        - Documentation only
+        - Not sure yet
+    validations:
+      required: true
+  - type: textarea
+    id: success
+    attributes:
+      label: Success criteria and open questions

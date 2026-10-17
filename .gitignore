@@ -1,0 +1,16 @@
+node_modules
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+.wrangler
+.wrangler-dist
+.deploy
+*.secrets.env
+*.tsbuildinfo
+.DS_Store
+*.log
+coverage
+*.setup.env
+.hygiene-names

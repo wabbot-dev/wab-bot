@@ -1,0 +1,37 @@
+name: Documentation
+description: A wrong, missing or confusing passage
+title: "[Docs] "
+labels: [documentation, triage]
+body:
+  - type: checkboxes
+    id: before-submitting
+    attributes:
+      label: Before submitting
+      options:
+        - label: I removed tokens, secrets, phone numbers and message text.
+          required: true
+  - type: input
+    id: page
+    attributes:
+      label: Page or section
+      placeholder: docs/STATUS.md, "What is verified"
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong
+      options:
+        - A claim is not backed by evidence or is out of date
+        - A step does not work as written
+        - Something is missing
+        - Unclear wording
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Quote the passage and say what you observed or what source contradicts it. Write `NOT_ENOUGH_INFO` where you do not know.
+    validations:
+      required: true

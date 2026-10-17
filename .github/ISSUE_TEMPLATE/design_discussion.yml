@@ -1,0 +1,69 @@
+name: Design discussion
+description: Discuss an architecture, contract, security or scope decision
+title: "[Design] "
+labels: [enhancement, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for a substantial decision: a new endpoint or MCP tool, a change to the send guards, the storage layout, authentication,
+        or anything that touches customer data or spends someone's money. One question and a short explanation are enough. Read the
+        [contribution scope](https://github.com/wabbot-dev/wab-bot/blob/main/CONTRIBUTING.md#contribution-scope);
+        unresolved boundaries block integration, not opening a discussion.
+  - type: checkboxes
+    id: before-submitting
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched open and closed issues and pull requests for a related discussion.
+          required: true
+        - label: This discussion contains no credentials, phone numbers or customer message text.
+          required: true
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision needed
+      placeholder: Should the bridge ... or ...?
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context and evidence
+      description: Distinguish observed behaviour, source-derived reasoning, proposed behaviour and unknowns.
+    validations:
+      required: true
+  - type: dropdown
+    id: effects
+    attributes:
+      label: Expected effects
+      multiple: true
+      options:
+        - Reads or writes stored conversation data
+        - Sends or can cause a WhatsApp message
+        - Changes who can access data (tokens, setup, admin)
+        - Contacts a new network service
+        - Creates or changes a provider account, billing or deployment
+        - Documentation or tests only
+        - Not sure yet
+    validations:
+      required: true
+  - type: dropdown
+    id: verification
+    attributes:
+      label: Verification available so far
+      options:
+        - Idea only; I need help defining checks
+        - I can suggest a manual check
+        - I have a prototype or observed results
+        - Not sure yet
+    validations:
+      required: true
+  - type: textarea
+    id: options
+    attributes:
+      label: Options and tradeoffs
+  - type: textarea
+    id: references
+    attributes:
+      label: References

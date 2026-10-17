@@ -1,0 +1,6 @@
+{
+  "extends": "../../tsconfig.worker.json",
+  "compilerOptions": { "types": ["@cloudflare/workers-types", "node", "@cloudflare/vitest-plugin/types"] },
+  "include": ["./**/*.ts", "../../src/**/*.ts", "../../lib/**/*.ts"],
+  "exclude": ["../../lib/fake-doc.ts", "../../lib/meta-fake.ts"]
+}
