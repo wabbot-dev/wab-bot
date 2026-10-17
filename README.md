@@ -55,7 +55,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-The script logs you in with `wrangler login --device` (you approve a code in your browser; it never creates an account), deploys, generates the bridge's own tokens, and uploads secrets on stdin. Other routes (Cloudflare API without a login, self-provisioned secrets) are in [docs/DEPLOY.md](docs/DEPLOY.md). The `wrangler` route has been run only as a dry run; the API route was run live ([status](docs/STATUS.md)).
+The script logs you in with `wrangler login --device` (you approve a code in your browser; it never creates an account), deploys, generates the bridge's own tokens, and uploads secrets on stdin. Other routes (Cloudflare API without a login, self-provisioned secrets) are in [docs/DEPLOY.md](docs/DEPLOY.md). The `wrangler` route was run live once with a Cloudflare API token instead of the device login (the interactive login and the hidden Meta prompts were not exercised), and the API route was run live too ([status](docs/STATUS.md)). If WA_APP_SECRET or WA_ACCESS_TOKEN is skipped, the script names it in a warning and exits with code 3. A liveness check answers at /api/health with only ok and version (no secrets, counts or messages); the deployment smoke test retries for up to 5 minutes while a new Worker propagates.
 
 ### 3. Connect Meta and your agent
 

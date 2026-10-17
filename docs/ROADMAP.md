@@ -14,7 +14,7 @@ This page lists what is deliberately not in v0.1.0 and what is planned. Nothing 
 | Settings page for importer options (disclosure, recording line, voice, language) | Deferred to a later version | Options are configuration values today |
 | Preset routines (ready-made flows by business type) | Planned with a later marketplace version | Not included |
 | First live run with a business-owned number, a template and a woken agent | Open | The gate for dropping the preview label |
-| Run the wrangler login deploy path live | Open | Only dry-run so far |
+| Run the interactive `wrangler login --device` deploy path live | Open | The script ran live once with an API token; the device login and hidden prompts did not |
 | Retention pass over more than 100 conversations per run | Open | Known limitation |
 | Media download | Not planned for v0.1 | Type and caption only |
 
