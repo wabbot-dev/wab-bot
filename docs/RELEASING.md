@@ -14,8 +14,8 @@ Versions follow [SemVer](https://semver.org/). Before 1.0.0, a breaking change b
 2. Re-read [STATUS.md](STATUS.md): every row still matches what you ran. Update dates and counts.
 3. Re-check the Cloudflare facts in [CLOUDFLARE.md](CLOUDFLARE.md) against Cloudflare's current pages and update the "read on" date.
 4. `git grep` for tokens, emails, phone numbers (also the number inside a WhatsApp call id), personal names and local paths is what `npm run hygiene` does (put your own list of names, one regex per line grouped by category, in `HYGIENE_NAMES` or an untracked `.hygiene-names` file; it also checks commit authors, messages and diffs, and `HYGIENE_HISTORY=strict` makes a history match fail); run it on the exact tree you tag.
-5. Tag from the commit you verified. Do not publish a package: the repository is marked `private` in `package.json`.
+5. Tag from the commit you verified. Do not publish an npm package: `package.json` is marked `"private": true`. A release is a GitHub Release created from the tag.
 
 ## v0.1.0
 
-The first commit was made locally with a neutral author and tagged `v0.1.0` locally. Pushing it, creating a remote or publishing the repository is a separate decision for the maintainer.
+`v0.1.0` (preview) was released on 2026-10-17: the repository is public at <https://github.com/wabbot-dev/wab-bot>, the tag `v0.1.0` marks the first commit, and a GitHub Release of the same name carries short notes taken from [CHANGELOG.md](../CHANGELOG.md). The update check (`check_for_update`) reads that "latest release".
