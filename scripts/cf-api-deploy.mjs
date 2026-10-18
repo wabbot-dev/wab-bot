@@ -11,12 +11,29 @@
 //   node scripts/cf-api-deploy.mjs provision --url https://NAME.SUB.workers.dev --secrets-file F        (POST /api/setup once; locks it)
 //   node scripts/cf-api-deploy.mjs rotate    --url URL --admin-token-file F --secrets-file G             (later changes, needs ADMIN_TOKEN)
 //   node scripts/cf-api-deploy.mjs deploy    --name NAME --secrets-file F [--var K=V ...] ...            (classic: values as secret_text bindings)
+//   node scripts/cf-api-deploy.mjs subdomain --name NAME [--subdomain SUB]                              (only make sure the account has a workers.dev subdomain)
 //   node scripts/cf-api-deploy.mjs verify    --url https://NAME.SUB.workers.dev --secrets-file F [--phone ID]
 //   node scripts/cf-api-deploy.mjs teardown  --name NAME [--emit-plugin-js OUT.js]
 //
-// Credentials: CLOUDFLARE_API_TOKEN (scopes: Workers Scripts:Edit, Account Settings:Read) and CLOUDFLARE_ACCOUNT_ID in the
-// environment, OR --emit-plugin-js, which writes an `async () => {...}` for a tool that already holds a Cloudflare
-// session (the file then contains your secrets: it is created mode 0600, delete/shred it after use).
+// workers.dev subdomain: a brand-new Cloudflare account has none, so `deploy` first does GET /accounts/{id}/workers/subdomain and, only if
+//   none is registered, PUT /accounts/{id}/workers/subdomain with "<worker name>-<6 random hex>" (new suffix on a name clash, a few tries) or
+//   --subdomain NAME (tried once), reads it back and builds the URL from it. An existing subdomain is never changed. `subdomain --name NAME
+//   [--subdomain NAME]` does just this step (deploy-cloudflare.sh calls it when a token is exported).
+//
+// Credentials: CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID in the environment, OR --emit-plugin-js, which writes an `async () => {...}`
+// for a tool that already holds a Cloudflare session (the file then contains your secrets: it is created mode 0600, delete/shred it after use).
+// Token permissions (create the token for THIS ONE account, nothing broader; no zone, user or "all accounts" scopes; set an expiry):
+//   Account > Workers Scripts > Edit    the only permission required. The dry run of 2026-10-17 found it sufficient for wrangler deploy
+//                                       (upload, secrets, cron, Durable Object migrations) and for registering the workers.dev subdomain
+//                                       by hand with PUT. (This script's own subdomain step has not been run live; a token that carries
+//                                       nothing else was not separately tested.)
+//   Account > Account Settings > Read   NOT needed by this script. The Cloudflare API reference lists "Workers Scripts Write" (PUT) and
+//                                       "Workers Scripts Read or Write" (GET) for the subdomain endpoints, not Account Settings
+//                                       (per Cloudflare docs, not tested with a token that lacks it). Do not add it.
+//   Registering a subdomain needs Workers Scripts: Edit (Cloudflare docs list "Workers Scripts Write" for the PUT; the by-hand PUT worked
+//   with an Edit token in the dry run). A read-only token (Workers Scripts: Read) can read the subdomain but not register one or
+//   deploy (per Cloudflare docs, not tested).
+//   Do not create the token broader than needed (no Workers KV/R2/D1, DNS, Zone, Account Settings: Edit, no Global API Key). See docs/CLOUDFLARE.md.
 // Secrets file: KEY=VALUE lines, mode 0600, never printed. Classic deploy uploads them as secret_text bindings. Self-provisioning
 // (--self-provision) uploads only SETUP_NONCE (a plain-text var); `provision` then sends the rest to POST /api/setup over HTTPS.
 // Why: plugins that redact secret values (the Cloudflare MCP plugin does) cannot carry secret bindings, and no API token or
@@ -26,6 +43,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { ensureSubdomain } from "./cf-subdomain.mjs";
 
 const SECRET_NAMES = ["WA_APP_SECRET", "WA_VERIFY_TOKEN", "MCP_TOKEN", "ADMIN_TOKEN", "CRON_SECRET", "WA_ACCESS_TOKEN", "WAKE_KEY", "XAI_API_KEY"];
 const VAR_NAMES = ["LAUNCH_MODE", "WA_PHONE_NUMBER_IDS", "WAKE_URL", "WAKE_DEBOUNCE_MS", "META_SETUP_ENABLED", "MAX_MESSAGES", "WAKE_TYPES", "WAKE_AUTH", "WAKE_HEADER", "STALE_WAKE_MS",
@@ -50,6 +68,10 @@ function parseArgs(argv) {
   return o;
 }
 function die(m) { console.error("ERROR: " + m); process.exit(1); }
+
+function checkSubdomainFlag(o) {
+  if (o.subdomain !== undefined && !/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/.test(o.subdomain)) die("--subdomain must be 1-63 lowercase letters, digits and dashes, not starting or ending with a dash");
+}
 
 function readEnvFile(file, allowed) {
   if (!file) die("--secrets-file is required");
@@ -85,7 +107,11 @@ function tomlValue(re, d) { const m = re.exec(readFileSync("wrangler.toml", "utf
 
 // ---- the programs: run either locally against the REST API or inside a tool that provides `cloudflare.request` ----
 const DEPLOY = `async (cloudflare, accountId, input) => {
+  const ensureSubdomain = /*ENSURE_SUBDOMAIN*/;
   const base = '/accounts/' + accountId + '/workers';
+  // A brand-new account has no workers.dev subdomain: register one BEFORE the first upload (never changes an existing one).
+  const sdr = await ensureSubdomain(cloudflare, accountId, { workerName: input.name, subdomain: input.subdomain });
+  if (!sdr.ok) return { ok: false, step: 'subdomain', error: sdr.error };
   const before = await cloudflare.request({ method: 'GET', path: base + '/scripts' });
   const exists = (before.result || []).some((s) => s.id === input.name);
   const metadata = { ...input.metadata };
@@ -111,14 +137,13 @@ const DEPLOY = `async (cloudflare, accountId, input) => {
     }
   }
   const sub = await cloudflare.request({ method: 'POST', path: base + '/scripts/' + input.name + '/subdomain', body: { enabled: true, previews_enabled: false } });
-  const acct = await cloudflare.request({ method: 'GET', path: base + '/subdomain' });
   let cron = null;
   if (input.cron && input.cron.length) {
     const c = await cloudflare.request({ method: 'PUT', path: base + '/scripts/' + input.name + '/schedules', body: input.cron.map((x) => ({ cron: x })) });
     cron = { success: c.success, errors: c.errors, result: c.result };
   }
-  const sd = acct.result && acct.result.subdomain;
-  return { ok: true, existed: exists, purgedSecretBindings: purged, subdomainEnabled: !!(sub.success && sub.result && sub.result.enabled), url: sd ? 'https://' + input.name + '.' + sd + '.workers.dev' : null, cron, scriptsBefore: (before.result || []).map((s) => s.id) };
+  const sd = sdr.subdomain;
+  return { ok: true, existed: exists, accountSubdomain: { name: sd, created: sdr.created }, purgedSecretBindings: purged, subdomainEnabled: !!(sub.success && sub.result && sub.result.enabled), url: sd ? 'https://' + input.name + '.' + sd + '.workers.dev' : null, cron, scriptsBefore: (before.result || []).map((s) => s.id) };
 }`;
 
 const TEARDOWN = `async (cloudflare, accountId, input) => {
@@ -128,6 +153,9 @@ const TEARDOWN = `async (cloudflare, accountId, input) => {
   const dos = await cloudflare.request({ method: 'GET', path: base + '/durable_objects/namespaces' });
   return { deleted: { success: del.success, errors: del.errors }, scripts: (scripts.result || []).map((s) => s.id), durableObjectNamespaces: (dos.result || []).map((d) => d.name + ':' + d.class) };
 }`;
+
+const PROGRAM_PARTS = { "/*ENSURE_SUBDOMAIN*/": ensureSubdomain.toString().replace(/^export\s+/, "") };
+const withParts = (program) => program.replace(/\/\*ENSURE_SUBDOMAIN\*\//g, () => PROGRAM_PARTS["/*ENSURE_SUBDOMAIN*/"]);
 
 function restShim() {
   const token = process.env.CLOUDFLARE_API_TOKEN, accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -147,6 +175,7 @@ function restShim() {
 }
 
 async function run(program, input, o) {
+  program = withParts(program);
   if (o["emit-plugin-js"]) {
     const js = `async () => {\n  const input = ${JSON.stringify(input)};\n  return (${program})(cloudflare, accountId, input);\n}\n`;
     writeFileSync(o["emit-plugin-js"], js, { mode: 0o600 });
@@ -156,6 +185,7 @@ async function run(program, input, o) {
   const { cloudflare, accountId } = restShim();
   const out = await (0, eval)(`(${program})`)(cloudflare, accountId, input);
   console.log(JSON.stringify(out, null, 2));
+  if (out && out.ok === false) { console.error(`ERROR: ${out.step || "step"} failed: ${out.error || JSON.stringify(out.errors ?? out)}`); process.exit(1); }
 }
 
 async function verify(o) {
@@ -253,8 +283,16 @@ if (cmd === "verify") await verify(o);
 else if (cmd === "init") init(o);
 else if (cmd === "provision") await provision(o);
 else if (cmd === "rotate") await rotate(o);
-else if (cmd === "deploy") {
+else if (cmd === "subdomain") {
   if (!NAME_RE.test(o.name || "")) die("--name must be lowercase letters, digits and dashes");
+  checkSubdomainFlag(o);
+  const { cloudflare, accountId } = restShim();
+  const r = await ensureSubdomain(cloudflare, accountId, { workerName: o.name, subdomain: o.subdomain });
+  if (!r.ok) die(r.error);
+  console.log(r.created ? `registered the account's workers.dev subdomain: ${r.subdomain}` : `the account's workers.dev subdomain is already registered (unchanged): ${r.subdomain}`);
+} else if (cmd === "deploy") {
+  if (!NAME_RE.test(o.name || "")) die("--name must be lowercase letters, digits and dashes");
+  checkSubdomainFlag(o);
   const bindings = [{ type: "durable_object_namespace", name: "STATE", class_name: "BridgeState" }, { type: "durable_object_namespace", name: "CALLS", class_name: "CallSession" }];
   if (o["purge-secret-bindings"] !== undefined && o["self-provision"] === undefined) die("--purge-secret-bindings only makes sense with --self-provision");
   if (o["self-provision"] !== undefined) {
@@ -277,8 +315,8 @@ else if (cmd === "deploy") {
   const flags = JSON.parse("[" + tomlValue(/compatibility_flags\s*=\s*\[([^\]]*)\]/, '"nodejs_compat"') + "]");
   if (o.flags) for (const f of o.flags.split(",")) if (!flags.includes(f)) flags.push(f); // test-only override
   const metadata = { main_module: "worker.js", compatibility_date: tomlValue(/compatibility_date\s*=\s*"([^"]+)"/, "2026-10-01"), compatibility_flags: flags, bindings, observability: { enabled: true } };
-  await run(DEPLOY, { name: o.name, code: build(o.bundle), metadata, purge: o["purge-secret-bindings"] !== undefined ? SECRET_NAMES : [], cron: o.cron ? o.cron.split(";").map((x) => x.trim()).filter(Boolean) : [], migrateFrom: o["migrate-from"] }, o);
+  await run(DEPLOY, { name: o.name, code: build(o.bundle), metadata, purge: o["purge-secret-bindings"] !== undefined ? SECRET_NAMES : [], subdomain: o.subdomain, cron: o.cron ? o.cron.split(";").map((x) => x.trim()).filter(Boolean) : [], migrateFrom: o["migrate-from"] }, o);
 } else if (cmd === "teardown") {
   if (!NAME_RE.test(o.name || "")) die("--name must be lowercase letters, digits and dashes");
   await run(TEARDOWN, { name: o.name }, o);
-} else die("usage: cf-api-deploy.mjs deploy|verify|teardown (see the header of this file)");
+} else die("usage: cf-api-deploy.mjs deploy|subdomain|verify|teardown (see the header of this file)");
