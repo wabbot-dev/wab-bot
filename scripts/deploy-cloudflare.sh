@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy WAB bot to YOUR OWN Cloudflare account (Workers + a SQLite Durable Object).
 #
-#   bash scripts/deploy-cloudflare.sh [--name <worker-name>] [--dry-run] [--no-secrets] [--allow-missing-secrets]
+#   bash scripts/deploy-cloudflare.sh [--name <worker-name>] [--subdomain <name>] [--dry-run] [--no-secrets] [--allow-missing-secrets]
 #   bash scripts/deploy-cloudflare.sh --set-secret WA_APP_SECRET        # add/rotate ONE secret later (hidden prompt)
 #   bash scripts/deploy-cloudflare.sh --self-provision [--name N]       # NO `wrangler secret put`: the Worker receives its secrets once, itself
 #
@@ -9,6 +9,9 @@
 #   1. checks Node >= 20 and installs dependencies (npm ci) if needed
 #   2. checks you are logged in; if not, runs `wrangler login --device` (a URL + code you approve in ANY browser; the
 #      script never sees your password and never creates an account: log in to a Cloudflare account that YOU own, see docs/CLOUDFLARE.md)
+#      With CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID exported, it then makes sure the account has a workers.dev subdomain (a brand-new
+#      account has none and `wrangler deploy` cannot ask in a non-interactive shell): reads it, and only if none is registered registers
+#      "<worker-name>-<random>" (or --subdomain NAME). An existing subdomain is never changed. Without those variables wrangler asks itself.
 #   3. deploys the Worker (`wrangler deploy`): with no secrets set yet every endpoint fails closed
 #   4. generates the bridge's own tokens (MCP_TOKEN, ADMIN_TOKEN, CRON_SECRET, WA_VERIFY_TOKEN) with openssl, writes
 #      them ONLY to a mode-0600 file under .deploy/ (git-ignored) and uploads them with `wrangler secret put`
@@ -25,16 +28,17 @@ set -Eeuo pipefail
 umask 077
 cd "$(dirname "$0")/.."
 
-NAME=""; DRY=0; NOSECRETS=0; ONLY=""; SELF=0; ALLOW_MISSING=0
+NAME=""; SUBDOMAIN=""; DRY=0; NOSECRETS=0; ONLY=""; SELF=0; ALLOW_MISSING=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) NAME="${2:?--name needs a value}"; shift 2 ;;
+    --subdomain) SUBDOMAIN="${2:?--subdomain needs a value}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --no-secrets) NOSECRETS=1; shift ;;
     --self-provision) SELF=1; shift ;;
     --allow-missing-secrets) ALLOW_MISSING=1; shift ;;
     --set-secret) ONLY="${2:?--set-secret needs a secret name}"; shift 2 ;;
-    -h|--help) sed -n '2,23p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -52,6 +56,7 @@ TOML_NAME="$(sed -n 's/^name *= *"\([^"]*\)".*/\1/p' wrangler.toml | head -1)"
 NAME="${NAME:-$TOML_NAME}"
 [[ "$NAME" =~ ^[a-z0-9][a-z0-9-]{0,52}[a-z0-9]$ ]] || die "worker name must be lowercase letters, digits and dashes (got '$NAME')"
 NAME_ARGS=(--name "$NAME")
+[ -z "$SUBDOMAIN" ] || [[ "$SUBDOMAIN" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] || die "--subdomain must be 1-63 lowercase letters, digits and dashes, not starting or ending with a dash (got '$SUBDOMAIN')"
 
 GEN_SECRETS=(MCP_TOKEN ADMIN_TOKEN CRON_SECRET WA_VERIFY_TOKEN)
 META_SECRETS=(WA_APP_SECRET WA_ACCESS_TOKEN)
@@ -59,7 +64,7 @@ ALLOWED=" ${GEN_SECRETS[*]} ${META_SECRETS[*]} WAKE_KEY WAKE_URL XAI_API_KEY ADM
 
 if [ "$DRY" = 1 ] && [ "$SELF" = 1 ]; then
   say "DRY RUN (no Cloudflare call, nothing written). Self-provisioning plan for Worker '$NAME':"
-  say "  1. npm ci (if node_modules is missing); wrangler whoami || wrangler login --device"
+  say "  1. npm ci (if node_modules is missing); wrangler whoami || wrangler login --device; with CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID: register a workers.dev subdomain if the account has none"
   say "  2. node scripts/cf-api-deploy.mjs init  -> .deploy/$NAME.setup.env (mode 0600): random SETUP_NONCE and bridge tokens; Meta values from exported WA_APP_SECRET / WA_ACCESS_TOKEN"
   say "  3. wrangler deploy ${NAME_ARGS[*]} --var SETUP_NONCE:<random>   (a plain-text var; NO secret bindings)"
   say "  4. node scripts/cf-api-deploy.mjs provision  -> POST /api/setup once over HTTPS; the Worker stores the values in its Durable Object and locks setup"
@@ -69,9 +74,10 @@ if [ "$DRY" = 1 ]; then
   say "DRY RUN (no Cloudflare call, nothing written). Plan for Worker '$NAME':"
   say "  1. npm ci (if node_modules is missing)"
   say "  2. wrangler whoami || wrangler login --device"
-  say "  3. wrangler deploy ${NAME_ARGS[*]}"
-  say "  4. generate + wrangler secret put: ${GEN_SECRETS[*]} (values saved to .deploy/$NAME.secrets.env, mode 0600)"
-  say "  5. prompt + wrangler secret put: ${META_SECRETS[*]} (hidden input, stdin only)"
+  say "  3. with CLOUDFLARE_API_TOKEN + CLOUDFLARE_ACCOUNT_ID exported: read the account's workers.dev subdomain; register one only if none exists"
+  say "  4. wrangler deploy ${NAME_ARGS[*]}"
+  say "  5. generate + wrangler secret put: ${GEN_SECRETS[*]} (values saved to .deploy/$NAME.secrets.env, mode 0600)"
+  say "  6. prompt + wrangler secret put: ${META_SECRETS[*]} (hidden input, stdin only)"
   exit 0
 fi
 
@@ -118,8 +124,20 @@ login_if_needed() {
   WR login --device
 }
 
+# A brand-new account has no workers.dev subdomain and `wrangler deploy` then cannot finish without asking. With an API token and the
+# account id in the environment, check it through the API (never changes an existing one). Otherwise wrangler handles it itself.
+ensure_subdomain() {
+  if [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || [ -z "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+    [ -z "${CLOUDFLARE_API_TOKEN:-}" ] || say "CLOUDFLARE_ACCOUNT_ID is not set: not checking the workers.dev subdomain. On a brand-new account, export it (or run: node scripts/cf-api-deploy.mjs subdomain --name $NAME) before deploying."
+    return 0
+  fi
+  local sub_args=(--name "$NAME"); [ -z "$SUBDOMAIN" ] || sub_args+=(--subdomain "$SUBDOMAIN")
+  node scripts/cf-api-deploy.mjs subdomain "${sub_args[@]}" || die "could not make sure the account has a workers.dev subdomain (see above); nothing was deployed"
+}
+
 if [ "$SELF" = 1 ]; then
   login_if_needed
+  ensure_subdomain
   mkdir -p .deploy; chmod 700 .deploy
   F=".deploy/$NAME.setup.env"
   node scripts/cf-api-deploy.mjs init --secrets-file "$F" --from-env
@@ -156,6 +174,7 @@ if [ -n "$ONLY" ]; then
 fi
 
 login_if_needed
+ensure_subdomain
 
 say "Deploying Worker '$NAME' (free plan; workers.dev URL; no custom domain)..."
 OUT="$(mktemp)"; trap 'rm -f "$OUT"' EXIT
