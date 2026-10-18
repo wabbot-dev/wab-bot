@@ -43,6 +43,39 @@ Other things to know:
 - **Data location.** Workers run near the caller; Free has no data-residency guarantee. Message text is stored in your Durable Object ([PRIVACY.md](PRIVACY.md)).
 - **Cloudflare is your processor** for customer personal data under its terms and Data Processing Addendum; you are the controller.
 
+## API token permissions
+
+Only needed when you deploy with a Cloudflare API token instead of `wrangler login` (`CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment; [DEPLOY.md](DEPLOY.md) paths A and B). Create a **custom token** in the dashboard (My Profile, API Tokens; or Manage Account, API Tokens for an account-owned token) with exactly this:
+
+| Permission | Needed? | Why |
+|---|---|---|
+| Account, **Workers Scripts, Edit** | **Yes, and sufficient** | The 2026-10-17 dry run deployed a Worker with it (upload, secrets, Cron Trigger, Durable Object migrations) and registered the account's workers.dev subdomain. Per Cloudflare docs the API call that registers a subdomain (`PUT /accounts/{id}/workers/subdomain`) accepts "Workers Scripts Write", which the dashboard calls Edit |
+| Account, Workers Scripts, Read | Only to read | Per Cloudflare docs it can read the subdomain (`GET`) but not register one, upload or deploy. Not tested |
+| Account, Account Settings, Read | **No** | The scripts do not use it: Cloudflare's API reference lists only the Workers Scripts permissions for the subdomain endpoints (per Cloudflare docs, not tested with a token that lacks it). Add it only if a call fails and its error asks for it |
+
+- **Scope the token to the one account** (Account Resources: include only your account). No zone, user or "all accounts" scope: the template needs none, and this bridge does not touch domains, DNS, KV, R2 or D1.
+- **Do not create the token broader than needed.** No Global API Key, no Edit on Account Settings, DNS, Zone, KV, R2 or D1, no "all accounts". Cloudflare's "Edit Cloudflare Workers" template bundles more permissions than Workers Scripts: Edit (compare its list with the table before you use it; per Cloudflare docs, not checked line by line here). Set a TTL (expiry) and delete the token in the dashboard when you are done.
+- A brand-new account may refuse to create tokens until you have **verified your email address** (the dry run got an HTTP 400 and a "please verify your email" toast first). Open the verification link in full as soon as it arrives.
+- **workers.dev subdomain.** A brand-new account has none, so the Worker has no workers.dev URL and a non-interactive `wrangler deploy` stops. With the token and `CLOUDFLARE_ACCOUNT_ID` exported, `scripts/deploy-cloudflare.sh` and `scripts/cf-api-deploy.mjs deploy` first read it (`GET /accounts/{id}/workers/subdomain`); if none is registered they register `<worker name>-<random suffix>` (or the name from `--subdomain NAME`), retry another suffix if the name is taken, read it back and use it for the URL. An existing subdomain is **never** changed. If Cloudflare rejects the registration the script stops with the reason and deploys nothing. This step is unit-tested against a mocked API only; it has not been run against Cloudflare. How Cloudflare answers the first `GET` on an account without a subdomain is not documented in the API reference: the code accepts an empty result, a 404 or error code 10007 as "none" and stops on anything else.
+
+## Show-once token handling
+
+Cloudflare shows the token secret **only once**, on the page that follows "Create Token" ([Cloudflare docs](https://developers.cloudflare.com/fundamentals/api/get-started/create-token/)). Copying it can fail: in the dry run the clipboard copy from a remote desktop did not work.
+
+1. **Keep that page open** (do not navigate away, reload or let a tool move the browser) until the token is stored **and** verified.
+2. Copy it into the place where it will live (a password manager, or the masked secret field of the tool that deploys), never into chat, a ticket, a file in the repository or a shell history. Do not retype it from a screenshot.
+3. **Verify** it before closing the page, with the test command that page shows (a `curl` to the token-verify endpoint; it must report an active token).
+4. **If the copy failed or the page is gone, roll the token** (My Profile, API Tokens, the three dots next to it, Roll; per [Cloudflare docs](https://developers.cloudflare.com/fundamentals/api/how-to/roll-token/) the old secret stops working and the permissions stay the same) and take the new secret from the new page. A lost secret cannot be shown again.
+5. If anyone or anything other than you captured the secret from your screen (only ever with your explicit say-so), treat it as exposed and roll it once the deploy is done.
+
+## Existing accounts
+
+Do not assume the Cloudflare account is new. The owner may already have an account with Workers on it.
+
+- **List before you deploy; touch only what you created.** Run `npx wrangler whoami` and list the account's Workers (dashboard, Workers & Pages; or `GET /accounts/{id}/workers/scripts`). Pick a Worker name that is **not** in the list: deploying under an existing name replaces that Worker, and `teardown` deletes it with its data. Never modify, redeploy, delete or read the secrets of a Worker you did not create. An existing workers.dev subdomain is shared by all of the account's Workers and is never changed by these scripts.
+- **The owner signs in, and does 2FA, themselves.** Sign-in, 2FA, recovery codes, email verification and terms acceptance are done by the account owner personally; no assistant enters a password or a 2FA code for them and none works around a 2FA or recovery prompt.
+- **Use the owner's own plain email address**, the one their Cloudflare (and Facebook) account is registered with, or one they control. Do not invent a "plus-tag" alias such as `name+anything@example.com`: in the dry run Cloudflare refused one ("a variation of this email address is already taken") and a Facebook sign-up with one never got past the form (cause not proven). If the email already has an account, the owner signs in or recovers it; do not try to create a second one.
+
 ## Webhook URL shape
 
-`https://<worker-name>.<your-account-subdomain>.workers.dev/api/webhook`. The subdomain is per account (Workers & Pages, Subdomain).
+`https://<worker-name>.<your-account-subdomain>.workers.dev/api/webhook`. The subdomain is per account (Workers & Pages, Subdomain); a brand-new account has none until one is registered (see [API token permissions](#api-token-permissions)).

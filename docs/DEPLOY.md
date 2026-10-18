@@ -2,7 +2,7 @@
 
 Deploys the bridge to **your own** Cloudflare account. Read [CLOUDFLARE.md](CLOUDFLARE.md) first (account ownership, plan, limits). Nothing here spends money: the scripts never change a plan and the Free plan needs no payment method.
 
-Prerequisites: Node.js 20+ (22 recommended, see `.nvmrc`), `openssl` for the wrangler path, and a Cloudflare account you own.
+Prerequisites: Node.js 20+ (22 recommended, see `.nvmrc`), `openssl` for the wrangler path, and a Cloudflare account you own. If the account already has Workers, read [Existing accounts](#existing-accounts) first.
 
 ## Path A: `wrangler` login (default)
 
@@ -14,13 +14,23 @@ bash scripts/deploy-cloudflare.sh --name my-business-wa           # lowercase le
 
 The script (read it first) checks Node, logs you in with `wrangler login --device` if needed (a URL and code you approve in any browser; it never sees your password and never creates an account), deploys, generates `MCP_TOKEN`, `ADMIN_TOKEN`, `CRON_SECRET` and `WA_VERIFY_TOKEN` with `openssl`, saves them to a mode-0600 file under `.deploy/` (git-ignored) and uploads them with `wrangler secret put` (value on **stdin**: never in argv, never echoed, never in `wrangler.toml`). It then asks, at hidden prompts, for `WA_APP_SECRET` and `WA_ACCESS_TOKEN` (or reads them if exported; empty = skip, add later with `--set-secret NAME`). If either was skipped, the script ends with a warning that names the skipped secrets and exits with code 3, because the Worker cannot verify Meta's webhooks or send replies without them. `--allow-missing-secrets` accepts that for a test setup (same warning, exit 0). `--no-secrets` sets nothing by your own choice and is not reported.
 
+With `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` exported (see [API token permissions](#api-token-permissions)), the script first makes sure the account has a workers.dev subdomain: a brand-new account has none and `wrangler deploy` cannot finish without one in a non-interactive shell. It registers one only if there is none (`--subdomain NAME`, or `<worker name>-<random suffix>`), never changes an existing one and stops with the reason if Cloudflare refuses. With `wrangler login` and no account id exported, wrangler asks for the subdomain itself.
+
 ## Path B: Cloudflare API, no `wrangler login`
 
-For CI and locked-down machines: `node scripts/cf-api-deploy.mjs deploy --name my-business-wa --secrets-file my.secrets.env --var LAUNCH_MODE=test --var WA_PHONE_NUMBER_IDS=<id> --cron "0 5 * * *"` uploads the bundle, secrets (from a mode-0600 `KEY=VALUE` file), the workers.dev route and the Cron schedule through the Cloudflare API, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment. `--emit-plugin-js FILE` writes the same steps for a tool that already holds a Cloudflare session. `node scripts/cf-api-deploy.mjs verify --url <url> --secrets-file my.secrets.env` checks the handshake (right and wrong token), the closed meta-setup route, unsigned and signed POSTs; `... teardown --name my-business-wa` deletes the Worker with force. Zero dependencies; it never changes a plan.
+For CI and locked-down machines: `node scripts/cf-api-deploy.mjs deploy --name my-business-wa --secrets-file my.secrets.env --var LAUNCH_MODE=test --var WA_PHONE_NUMBER_IDS=<id> --cron "0 5 * * *"` uploads the bundle, secrets (from a mode-0600 `KEY=VALUE` file), the workers.dev route and the Cron schedule through the Cloudflare API, with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment. `--emit-plugin-js FILE` writes the same steps for a tool that already holds a Cloudflare session. `node scripts/cf-api-deploy.mjs verify --url <url> --secrets-file my.secrets.env` checks the handshake (right and wrong token), the closed meta-setup route, unsigned and signed POSTs; `... teardown --name my-business-wa` deletes the Worker with force. Zero dependencies; it never changes a plan. Before the first upload it reads the account's workers.dev subdomain and, only when none is registered (a brand-new account), registers `<worker name>-<random suffix>` or the name given with `--subdomain NAME` (another suffix is tried a few times when a name is taken); `node scripts/cf-api-deploy.mjs subdomain --name my-business-wa` runs just that step. An existing subdomain is never changed, and a failed step exits with code 1 and the reason. This step is unit-tested with a mocked API and has not been run against Cloudflare.
+
+### API token permissions
+
+Create a custom token for **your one account** with **Account, Workers Scripts, Edit**, and nothing else: that is sufficient per the dry run of 2026-10-17 (deploy, secrets, Cron Trigger, Durable Object migrations, registering the workers.dev subdomain). Registering a subdomain needs that same permission per Cloudflare docs (the API lists "Workers Scripts Write" for it). Account Settings: Read is **not** used by the scripts (per Cloudflare docs, not tested without it). **Do not create the token broader than needed**: no Global API Key, no "all accounts", no zone, DNS, KV, R2 or D1 permissions; set an expiry and delete it when done. A new account must have its email verified before Cloudflare lets you create a token. The secret is shown once, so keep the page open until it is stored and verified, and roll the token if it is lost. Details, the table and the show-once steps: [CLOUDFLARE.md](CLOUDFLARE.md#api-token-permissions) and [CLOUDFLARE.md](CLOUDFLARE.md#show-once-token-handling).
 
 ## Path C: self-provisioned secrets
 
 When a deploy route cannot carry secret values (some tool integrations redact them), the Worker can receive its secrets itself, once: see [SELF-PROVISIONING.md](SELF-PROVISIONING.md).
+
+## Existing accounts
+
+The Cloudflare account may already have Workers: list them before you deploy (`npx wrangler whoami`, the dashboard, or `GET /accounts/{id}/workers/scripts`), choose a Worker name that is not in the list (an existing name is replaced), and never touch a Worker you did not create. The account owner signs in and does any 2FA personally. Use the owner's own plain email address: Cloudflare refused a plus-tag alias in the dry run, and a Facebook sign-up with one did not go through either. Full text: [CLOUDFLARE.md](CLOUDFLARE.md#existing-accounts).
 
 ## After the deploy
 
