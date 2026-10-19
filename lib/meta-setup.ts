@@ -53,7 +53,7 @@ export interface Req {
   appId?: string; businessId?: string; wabaId?: string; phoneId?: string; systemUserId?: string;
   createBusiness?: { name: string; email?: string; vertical: string; timezoneId?: number };
   systemUserName: string; systemUserRole: "ADMIN" | "EMPLOYEE";
-  mintToken: boolean; returnToken: boolean; forceMint: boolean;
+  mintToken: boolean; returnToken: boolean; storeToken: boolean; forceMint: boolean;
   phone?: { cc: string; number: string; name: string };
   codeMethod: "SMS" | "VOICE"; language: string; code?: string;
   pin?: string; generatePin: boolean; forceRegister: boolean;
@@ -64,7 +64,7 @@ export interface Req {
 }
 const KEYS = new Set([
   "action", "steps", "continue_on_fail", "graph_version", "bootstrap_token", "app_secret", "app_id", "business_id", "waba_id", "phone_number_id",
-  "system_user_id", "create_business", "system_user_name", "system_user_role", "mint_token", "return_token", "force_mint", "phone", "code_method",
+  "system_user_id", "create_business", "system_user_name", "system_user_role", "mint_token", "return_token", "store_token", "force_mint", "phone", "code_method",
   "language", "code", "pin", "generate_pin", "force_register", "templates", "new_display_name", "to", "test_template", "test_language", "confirm",
   "webhook_url", "webhook_fields", "waba_override",
 ]);
@@ -110,7 +110,7 @@ export function parseReq(o: unknown): Req {
     appId: id("app_id"), businessId: id("business_id"), wabaId: id("waba_id"), phoneId: id("phone_number_id"), systemUserId: id("system_user_id"),
     systemUserName: str("system_user_name", /^[A-Za-z0-9 _.\-]{3,60}$/, 60) ?? "wab-bot-system-user",
     systemUserRole: (str("system_user_role", /^(ADMIN|EMPLOYEE)$/, 8) as "ADMIN" | "EMPLOYEE" | undefined) ?? "ADMIN",
-    mintToken: bool("mint_token"), returnToken: bool("return_token"), forceMint: bool("force_mint"),
+    mintToken: bool("mint_token"), returnToken: bool("return_token"), storeToken: bool("store_token"), forceMint: bool("force_mint"),
     codeMethod: (str("code_method", /^(SMS|VOICE)$/, 5) as "SMS" | "VOICE" | undefined) ?? "SMS",
     language: str("language", /^[a-z]{2}_[A-Z]{2}$/, 5) ?? "en_US", // request_code: Meta wants a locale such as en_US
     code: str("code", /^[\d\s-]{6,9}$/, 9)?.replace(/\D/g, ""),
@@ -156,7 +156,9 @@ export function parseReq(o: unknown): Req {
     if (!Array.isArray(b.webhook_fields) || !b.webhook_fields.length || b.webhook_fields.some((f) => typeof f !== "string" || !WEBHOOK_FIELDS_OK.includes(f))) throw new BadReq("webhook_fields", `allowed: ${WEBHOOK_FIELDS_OK.join(",")}`);
     req.webhookFields = [...new Set(b.webhook_fields as string[])];
   }
-  if (req.mintToken && !req.returnToken) throw new BadReq("return_token", "mint_token requires return_token=true: a minted token cannot be fetched again and is never stored by the bridge");
+  if (req.storeToken && !req.mintToken) throw new BadReq("store_token", "only meaningful with mint_token=true");
+  if (req.storeToken && req.returnToken) throw new BadReq("store_token", "choose store_token (kept in this Worker, never returned) OR return_token (returned once), not both");
+  if (req.mintToken && !req.returnToken && !req.storeToken) throw new BadReq("return_token", "mint_token requires return_token=true or store_token=true: a minted token cannot be fetched again");
   if (req.mintToken && !req.steps.includes("system_user")) throw new BadReq("mint_token", "only meaningful with the system_user step");
   return req;
 }
@@ -249,6 +251,8 @@ export class Setup {
   appSecret?: string;
   tf: TokenFacts | null = null;
   secrets: { WA_ACCESS_TOKEN?: string; REGISTRATION_PIN?: string } = {};
+  /** store_token: a verified minted token goes into this Worker's own secret store instead of the response */
+  toStore?: string;
   manual: Record<string, unknown> | null = null;
   next: string[] = [];
 
@@ -486,7 +490,11 @@ export class Setup {
     const scopesOk = [WA_MGMT, WA_MSG].every((s) => v.scopes.includes(s));
     const facts = { edge, type: v.type, scopes: v.scopes, expires: v.expiresAt === 0 ? "never" : v.expiresAt ? isoSec(v.expiresAt) : "unknown", app_id: v.appId, token_sha256_8: sha8(minted) };
     this.secrets.WA_ACCESS_TOKEN = minted; // returned once in secret_delivery, never logged or stored
-    if (v.valid && v.type === "SYSTEM_USER" && v.expiresAt === 0 && scopesOk && v.appId === app) {
+    if (v.valid && v.type === "SYSTEM_USER" && v.expiresAt === 0 && scopesOk && v.appId === app && q.storeToken) {
+      this.toStore = minted;
+      delete this.secrets.WA_ACCESS_TOKEN; // store_token: never in the response
+      this.add(D, DN, "PASS", "minted and verified with debug_token: valid, SYSTEM_USER, never expires, WhatsApp scopes present. Stored in this Worker (store_token); not returned.", facts);
+    } else if (v.valid && v.type === "SYSTEM_USER" && v.expiresAt === 0 && scopesOk && v.appId === app) {
       this.add(D, DN, "PASS", "minted and verified with debug_token: valid, SYSTEM_USER, never expires, WhatsApp scopes present. Delivered once in secret_delivery.", facts);
       this.next.push("Set WA_ACCESS_TOKEN (and WA_APP_SECRET) as Worker secrets from secret_delivery now (wrangler secret put, value on stdin); never paste them into chat.");
     } else {
@@ -572,15 +580,18 @@ export class Setup {
     const S = "subscribed_apps", N = "App subscribed to the WABA";
     const waba = this.ids.waba_id, app = this.ids.app_id;
     if (!waba || !app) { this.add(S, N, "FAIL", `need ${!waba ? "waba_id (waba step first)" : "app_id"}`); return; }
-    const has = (b: any) => list(b).some((x) => String(x?.whatsapp_business_api_data?.id ?? x?.id) === app);
+    const ids = (b: any): string[] => [...new Set(list(b).map((x) => String(x?.whatsapp_business_api_data?.id ?? x?.id ?? "")).filter(Boolean))];
     const g1 = await this.g.call("GET", `/${waba}/subscribed_apps`, { token: this.tok });
     if (!g1.ok) { this.add(S, N, "FAIL", `GET subscribed_apps: ${g1.error}`); return; }
-    if (has(g1.body)) { this.add(S, N, "PASS", "app already subscribed (skipped)", { waba_id: waba, app_id: app, subscribed: true, changed: false }); return; }
+    const before = ids(g1.body);
+    if (before.includes(app)) { this.add(S, N, "PASS", "app already subscribed (skipped)", { waba_id: waba, app_id: app, subscribed: true, changed: false, before_app_ids: before, after_app_ids: before }); return; }
+    if (before.length) this.add("subscribed_apps_other_apps", "Other apps were subscribed, not yours", "WARN", `${before.length} other app(s) were subscribed to this WABA but not yours (a common cause of "the first message never arrives"); subscribing yours now`, { before_app_ids: before });
     const p = await this.g.call("POST", `/${waba}/subscribed_apps`, { token: this.tok, form: {} });
-    if (!p.ok) { this.add(S, N, "FAIL", `POST subscribed_apps: ${p.error}`); return; }
+    if (!p.ok) { this.add(S, N, "FAIL", `POST subscribed_apps: ${p.error}`, { before_app_ids: before }); return; }
     const v = await this.g.call("GET", `/${waba}/subscribed_apps`, { token: this.tok });
-    if (v.ok && has(v.body)) this.add(S, N, "PASS", "subscribed and read back", { waba_id: waba, app_id: app, subscribed: true, changed: true });
-    else this.add(S, N, "FAIL", v.ok ? "POST accepted but the app is not listed afterwards" : `read-back failed: ${v.error}`);
+    const after = v.ok ? ids(v.body) : [];
+    if (v.ok && after.includes(app)) this.add(S, N, "PASS", "subscribed and read back", { waba_id: waba, app_id: app, subscribed: true, changed: true, before_app_ids: before, after_app_ids: after });
+    else this.add(S, N, "FAIL", v.ok ? "POST accepted but the app is not listed afterwards" : `read-back failed: ${v.error}`, { before_app_ids: before, after_app_ids: after });
   }
 
   async webhook(origin: string): Promise<void> {
@@ -723,7 +734,10 @@ export function metaSetupGet(ctx: Ctx, req: Request): Response {
   });
 }
 
-export async function metaSetupPost(ctx: Ctx, req: Request): Promise<Response> {
+/** Host hook for store_token: put values into this Worker's own secret store (src/setup.ts). Never returns a value. */
+export interface MetaSetupHost { storeSecrets?: (values: Record<string, string>) => Promise<{ overridden_by_env: string[] }> }
+
+export async function metaSetupPost(ctx: Ctx, req: Request, host: MetaSetupHost = {}): Promise<Response> {
   if (!adminAuthorized(ctx, req)) return unauthorized();
   const r = new Redactor();
   for (const s of [ctx.cfg.waAccessToken, ctx.cfg.waAppSecret, ctx.cfg.adminToken, ctx.cfg.mcpToken, ctx.cfg.cronSecret]) r.add(s);
@@ -784,6 +798,18 @@ export async function metaSetupPost(ctx: Ctx, req: Request): Promise<Response> {
       }
       const bad = s.results.slice(before).find((x) => x.status === "FAIL");
       if (bad && !q.continueOnFail) blockedBy = bad.id;
+    }
+    if (s.toStore) {
+      const T = "system_user_token_stored", TN = "Token stored in this Worker";
+      if (!host.storeSecrets) { s.add(T, TN, "FAIL", "this host cannot store secrets; the token is delivered once in secret_delivery instead"); s.secrets.WA_ACCESS_TOKEN = s.toStore; }
+      else {
+        try {
+          const st = await host.storeSecrets({ WA_ACCESS_TOKEN: s.toStore });
+          if (st.overridden_by_env.includes("WA_ACCESS_TOKEN")) s.add(T, TN, "WARN", "stored, but a WA_ACCESS_TOKEN Worker secret binding overrides it: replace or delete that binding");
+          else s.add(T, TN, "PASS", "stored in the Worker's secret store (POST /api/admin/secrets semantics); never returned or logged");
+        } catch { s.add(T, TN, "FAIL", "storing failed; the token is delivered once in secret_delivery instead"); s.secrets.WA_ACCESS_TOKEN = s.toStore; }
+      }
+      s.toStore = undefined;
     }
     const sum = { pass: 0, fail: 0, warn: 0, skip: 0 };
     for (const x of s.results) sum[x.status.toLowerCase() as keyof typeof sum]++;

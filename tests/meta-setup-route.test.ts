@@ -618,3 +618,37 @@ test("docs conformance: language must be a locale (en_US) and unknown business v
   const post = fm.calls.find((c) => c.method === "POST" && /\/businesses$/.test(c.path));
   assert.equal(post?.form.vertical, "OTHER");
 });
+
+test("subscribed_apps: before/after app ids in the facts; WARN when only other apps were subscribed", async () => {
+  const { fm, call } = setup();
+  fm.subscribedApps.push("1111111111111");
+  const r = await call({ bootstrap_token: BOOT, waba_id: fm.wabaId, steps: ["subscribed_apps"] });
+  const f = step(r.json, "subscribed_apps").facts;
+  assert.deepEqual(f.before_app_ids, ["1111111111111"]);
+  assert.deepEqual(f.after_app_ids, ["1111111111111", fm.appId]);
+  assert.equal(step(r.json, "subscribed_apps_other_apps").status, "WARN");
+});
+
+test("store_token: the verified minted token goes into the Worker's store, never into the response", async () => {
+  const { fm, call, h } = setup({ WA_ACCESS_TOKEN: undefined });
+  void fm;
+  const stored: Record<string, string>[] = [];
+  const bad = await call({ ...FULL, mint_token: true, return_token: true, store_token: true });
+  assert.equal(bad.status, 400);
+  const res = await metaSetupPost(h.ctx, new Request(URL_, { method: "POST", headers: { Authorization: `Bearer ${ADMIN_TOKEN}` }, body: JSON.stringify({ ...FULL, mint_token: true, store_token: true }) }),
+    { storeSecrets: async (v) => { stored.push(v); return { overridden_by_env: [] }; } });
+  const text = await res.text();
+  const j = JSON.parse(text);
+  assert.equal(step(j, "system_user_token").status, "PASS");
+  assert.equal(step(j, "system_user_token_stored").status, "PASS");
+  assert.equal(j.secret_delivery, undefined);
+  assert.ok(!text.includes(SYS));
+  assert.deepEqual(stored, [{ WA_ACCESS_TOKEN: SYS }]);
+});
+
+test("store_token without a host that can store: falls back to one-time delivery", async () => {
+  const { call } = setup({ WA_ACCESS_TOKEN: undefined });
+  const r = await call({ ...FULL, mint_token: true, store_token: true });
+  assert.equal(step(r.json, "system_user_token_stored").status, "FAIL");
+  assert.equal(r.json.secret_delivery.values.WA_ACCESS_TOKEN, SYS);
+});

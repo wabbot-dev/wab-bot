@@ -201,6 +201,20 @@ export const ADMIN_TOOLS: Tool[] = [
       add("WAKE_URL", !!cfg.wakeUrl, "required", "Set WAKE_URL (https) where the content-free wake goes; without it the agent is never woken.");
       add("WAKE_KEY", !!cfg.wakeKey, "recommended", "Set WAKE_KEY if your wake endpoint needs a key.");
       add("WA_PHONE_NUMBER_IDS", cfg.phoneNumberIds.length > 0, "recommended", "Restrict the bridge to your phone number id(s).");
+      // Read-only Graph GET (no write): is the owner's app subscribed to the WABA? The usual cause of "the first message never arrives".
+      let subscribed: { checked: boolean; app_ids_count?: number; own_app_listed?: boolean | null; error?: string } = { checked: false };
+      if (cfg.wabaId && cfg.waAccessToken) {
+        try {
+          const res = await fetchTimeout(ctx, `https://graph.facebook.com/${cfg.graphVersion}/${cfg.wabaId}/subscribed_apps`, { headers: { Authorization: `Bearer ${cfg.waAccessToken}` } }, 8000);
+          const j = (await res.json().catch(() => ({}))) as { data?: { whatsapp_business_api_data?: { id?: string }; id?: string }[] };
+          const ids = (j.data ?? []).map((x) => String(x?.whatsapp_business_api_data?.id ?? x?.id ?? "")).filter(Boolean);
+          subscribed = res.ok ? { checked: true, app_ids_count: ids.length, own_app_listed: cfg.appId ? ids.includes(cfg.appId) : null } : { checked: true, error: `http_${res.status}` };
+        } catch { subscribed = { checked: true, error: "network" }; }
+        const ok = !subscribed.error && (subscribed.own_app_listed === true || (subscribed.own_app_listed === null && (subscribed.app_ids_count ?? 0) > 0));
+        add("waba_app_subscribed", ok, "required", subscribed.error
+          ? "Could not read the WABA's subscribed apps; check WA_ACCESS_TOKEN has whatsapp_business_management and WA_WABA_ID is right."
+          : "Your app is not subscribed to the WABA: run the meta-setup subscribed_apps step (POST /{WABA_ID}/subscribed_apps), then read it back. Set WA_APP_ID to check your app id exactly.");
+      } else add("waba_app_subscribed", false, "info", "Set WA_WABA_ID (and WA_APP_ID) so this check can read the WABA's subscribed apps.");
       add("launch_mode", cfg.launchMode === "live" || cfg.testRecipients.length > 0, "recommended", "LAUNCH_MODE is test with no TEST_RECIPIENTS: replies go nowhere. Add recipients or go live when ready.");
       add("webhook_handshake_seen", v !== null, "recommended", "No Meta verification handshake has reached this Worker yet: set the callback URL and verify token in the Meta app and press Verify.");
       add("auto_reply_active", controlsOf(snapC).autoReply === "active", "info", "Auto-reply is paused (the safe default). Activate it when you want the agent to answer.");
@@ -216,6 +230,7 @@ export const ADMIN_TOOLS: Tool[] = [
         ready_to_receive: !!cfg.waAppSecret && !!cfg.waVerifyToken && cfg.waVerifyToken.length >= 16,
         ready_to_reply: !!cfg.waAccessToken && cfg.phoneNumberIds.length > 0,
         ready_to_wake_agent: !!cfg.wakeUrl,
+        waba_subscription: subscribed,
         missing_required: required.filter((c) => !c.ok).map((c) => c.id),
         checks,
         owner_only_steps: "Cloudflare/xAI account creation, secret entry, Meta Business Verification and the SMS/voice code on your own SIM stay with you (docs/mcp.md).",

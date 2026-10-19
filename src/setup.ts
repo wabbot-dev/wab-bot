@@ -85,6 +85,18 @@ export async function handleSetup(env: Env, req: Request): Promise<Response> {
   return json({ ok: true, locked: true, stored: Object.keys(values).sort(), note: "Setup is now permanently locked. Rotate later with POST /api/admin/secrets (ADMIN_TOKEN)." });
 }
 
+/** Store values into the Durable Object secret store (used by meta-setup store_token). Names of env-overridden keys only. */
+export async function storeSecrets(env: Env, values: Record<string, string>): Promise<{ overridden_by_env: string[] }> {
+  const v = validateSecrets(values, false);
+  if (!v.ok) throw new Error(`invalid_${v.error}`);
+  const src = sources(env, (await stateStub(env.STATE).getSecrets()).values);
+  await stateStub(env.STATE).putSecrets(v.values, Date.now());
+  forceReload();
+  await ensureSecrets(env);
+  consoleLog("secrets_rotated", { changed: Object.keys(values).length, via: "meta_setup" });
+  return { overridden_by_env: Object.keys(values).filter((n) => src[n] === "env") };
+}
+
 /** GET /api/admin/secrets: names and sources only. POST {secrets:{NAME:value|null}}: rotate. Admin token required. */
 export async function handleAdminSecrets(env: Env, req: Request): Promise<Response> {
   if (req.method !== "GET" && req.method !== "POST") return json({ error: "method_not_allowed" }, 405, { Allow: "GET, POST" });
