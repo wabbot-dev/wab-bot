@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Deploy WAB bot to YOUR OWN Cloudflare account (Workers + a SQLite Durable Object).
 #
-#   bash scripts/deploy-cloudflare.sh [--name <worker-name>] [--subdomain <name>] [--dry-run] [--no-secrets] [--allow-missing-secrets]
+#   bash scripts/deploy-cloudflare.sh [--name <worker-name>] [--subdomain <name>] [--dry-run] [--no-secrets]
 #   bash scripts/deploy-cloudflare.sh --set-secret WA_APP_SECRET        # add/rotate ONE secret later (hidden prompt)
 #   bash scripts/deploy-cloudflare.sh --self-provision [--name N]       # NO `wrangler secret put`: the Worker receives its secrets once, itself
 #
@@ -17,10 +17,6 @@
 #      them ONLY to a mode-0600 file under .deploy/ (git-ignored) and uploads them with `wrangler secret put`
 #   5. asks (hidden prompt, or from the environment) for the Meta values WA_APP_SECRET and WA_ACCESS_TOKEN
 #
-# Exit codes: 0 done; 1 error; 2 bad option; 3 deployed, but WA_APP_SECRET and/or WA_ACCESS_TOKEN were skipped (the bridge cannot
-# verify or send Meta traffic until they are set). The warning names the skipped secrets; --allow-missing-secrets accepts that for
-# test setups (warning still printed, exit 0). Add a skipped value later with --set-secret NAME. --no-secrets sets nothing by your own choice and is not reported.
-#
 # Secret handling: values are never put in argv (they are piped to `wrangler secret put` on stdin), never echoed and
 # never written to wrangler.toml. Environment variables named like the secrets are read if already exported.
 # Nothing here touches Meta. Free plan only; this script cannot spend money (it never upgrades a plan).
@@ -28,7 +24,7 @@ set -Eeuo pipefail
 umask 077
 cd "$(dirname "$0")/.."
 
-NAME=""; SUBDOMAIN=""; DRY=0; NOSECRETS=0; ONLY=""; SELF=0; ALLOW_MISSING=0
+NAME=""; SUBDOMAIN=""; DRY=0; NOSECRETS=0; ONLY=""; SELF=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) NAME="${2:?--name needs a value}"; shift 2 ;;
@@ -36,14 +32,21 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY=1; shift ;;
     --no-secrets) NOSECRETS=1; shift ;;
     --self-provision) SELF=1; shift ;;
-    --allow-missing-secrets) ALLOW_MISSING=1; shift ;;
     --set-secret) ONLY="${2:?--set-secret needs a secret name}"; shift 2 ;;
-    -h|--help) sed -n '2,26p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
 
 say() { printf '%s\n' "$*"; }
+# Names (never values) of required secrets that were skipped or failed to upload. Any entry makes the script exit non-zero.
+NOT_SET=()
+not_set() { NOT_SET+=("$1"); }
+fail_if_not_set() { # context
+  [ "${#NOT_SET[@]}" -eq 0 ] && return 0
+  printf 'ERROR: %s, but these required secrets were NOT set: %s\n' "$1" "${NOT_SET[*]}" >&2
+  return 1
+}
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 WR() { WRANGLER_SEND_METRICS="${WRANGLER_SEND_METRICS:-false}" npx --no-install wrangler "$@"; }
 
@@ -83,36 +86,27 @@ fi
 
 [ -d node_modules ] || { say "Installing dependencies (npm ci)..."; npm ci --no-audit --no-fund >/dev/null; }
 
-# Meta values this run did not set. Reported at the end (names only) and turned into exit code 3 unless --allow-missing-secrets.
-SKIPPED=()
-finish_code() { # prints the warning when something was skipped; returns the exit code to use
-  [ "${#SKIPPED[@]}" -gt 0 ] || return 0
-  say >&2
-  say "WARNING: deployed, but these secrets were NOT set by this run: ${SKIPPED[*]}" >&2
-  say "  Without them the Worker cannot verify Meta's signed webhooks or send replies (if you set them in an earlier run, they are still in place)." >&2
-  say "  Add each one with: bash scripts/deploy-cloudflare.sh --set-secret <NAME>" >&2
-  [ "$ALLOW_MISSING" = 1 ] && { say "  --allow-missing-secrets given: exiting 0." >&2; return 0; }
-  say "  Exiting 3 (pass --allow-missing-secrets to accept this for a test setup)." >&2
-  return 3
-}
-
 # Put one secret: value on STDIN only, never in argv, never echoed.
 put_secret() { # name value
   [[ "$ALLOWED" == *" $1 "* ]] || die "unknown secret name: $1"
-  printf '%s' "$2" | WR secret put "$1" "${NAME_ARGS[@]}" >/dev/null
-  say "  set $1"
+  if printf '%s' "$2" | WR secret put "$1" "${NAME_ARGS[@]}" >/dev/null; then
+    say "  set $1"
+  else
+    say "  FAILED to set $1 (retry with: bash scripts/deploy-cloudflare.sh --set-secret $1)"
+    not_set "$1"
+  fi
 }
 
 # Hidden prompt (value stays in this shell only). Uses the exported variable of the same name when present.
 ask_secret() { # name label
   local n="$1" v="${!1:-}"
   if [ -z "$v" ]; then
-    [ -t 0 ] || { SKIPPED+=("$n"); say "  skipped $n (no terminal; export $n or run: bash scripts/deploy-cloudflare.sh --set-secret $n)"; return 0; }
+    [ -t 0 ] || { say "  skipped $n (no terminal; export $n or run: bash scripts/deploy-cloudflare.sh --set-secret $n)"; not_set "$n"; return 0; }
     printf '%s (input hidden, empty = skip): ' "$2" >&2
     IFS= read -rs v || true
     printf '\n' >&2
   fi
-  [ -n "$v" ] || { SKIPPED+=("$n"); say "  skipped $n (set it later with: bash scripts/deploy-cloudflare.sh --set-secret $n)"; return 0; }
+  [ -n "$v" ] || { say "  skipped $n (set it later with: bash scripts/deploy-cloudflare.sh --set-secret $n)"; not_set "$n"; return 0; }
   put_secret "$n" "$v"
   v=""
 }
@@ -146,10 +140,11 @@ if [ "$SELF" = 1 ]; then
       if [ -t 0 ]; then
         printf '%s (input hidden, empty = skip, add later with scripts/cf-api-deploy.mjs rotate): ' "$n" >&2
         IFS= read -rs v || true; printf '\n' >&2
-        if [ -z "$v" ]; then SKIPPED+=("$n"); else printf '%s=%s\n' "$n" "$v" >> "$F"; fi
+        if [ -n "$v" ]; then printf '%s=%s\n' "$n" "$v" >> "$F"; else say "  skipped $n (add it later with scripts/cf-api-deploy.mjs rotate)"; not_set "$n"; fi
         v=""
       else
-        SKIPPED+=("$n"); say "  no $n in the environment and no terminal: skipped (add it later with scripts/cf-api-deploy.mjs rotate)"
+        say "  no $n in the environment and no terminal: skipped (add it later with scripts/cf-api-deploy.mjs rotate)"
+        not_set "$n"
       fi
     fi
   done
@@ -161,15 +156,19 @@ if [ "$SELF" = 1 ]; then
   [ -n "$URL" ] || die "could not find the workers.dev URL in the wrangler output"
   sleep 3
   node scripts/cf-api-deploy.mjs provision --url "$URL" --secrets-file "$F"
-  [ "${#SKIPPED[@]}" -gt 0 ] && say "Deployed and setup is locked (not finished: see the warning below). Webhook callback URL: $URL/api/webhook" || say "Done. Setup is locked. Webhook callback URL: $URL/api/webhook"
+  if ! fail_if_not_set "Setup was provisioned and is now locked"; then
+    printf '  Add them with: node scripts/cf-api-deploy.mjs rotate --url %s --admin-token-file %s --secrets-file <file with the missing KEY=VALUE lines>\n' "$URL" "$F" >&2
+    exit 1
+  fi
+  say "Done. Setup is locked. Webhook callback URL: $URL/api/webhook"
   say "  Your values stay in $F (mode 0600, git-ignored). Later changes: node scripts/cf-api-deploy.mjs rotate --url $URL --admin-token-file $F --secrets-file <file with the new KEY=VALUE lines>"
-  rc=0; finish_code || rc=$?
-  exit "$rc"
+  exit 0
 fi
 
 if [ -n "$ONLY" ]; then
   login_if_needed
   ask_secret "$ONLY" "$ONLY"
+  fail_if_not_set "--set-secret did not complete" || exit 1
   exit 0
 fi
 
@@ -200,12 +199,15 @@ if [ "$NOSECRETS" = 0 ]; then
   for n in "${META_SECRETS[@]}"; do ask_secret "$n" "$n"; done
 fi
 
+if ! fail_if_not_set "The Worker was deployed${URL:+ to $URL}"; then
+  printf '  Set each one with: bash scripts/deploy-cloudflare.sh --name %s --set-secret <NAME>   (until then the matching endpoints fail closed)\n' "$NAME" >&2
+  exit 1
+fi
+
 say
-if [ "${#SKIPPED[@]}" -gt 0 ]; then say "Deployed (not finished: see the warning below). Worker: ${URL:-<see the wrangler output above>}"; else say "Done. Worker: ${URL:-<see the wrangler output above>}"; fi
+say "Done. Worker: ${URL:-<see the wrangler output above>}"
 [ -n "$URL" ] && say "  Meta webhook callback URL:  $URL/api/webhook"
 [ -n "$URL" ] && say "  Agent MCP endpoint:         $URL/mcp   (Authorization: Bearer <MCP_TOKEN>)"
 [ -n "$URL" ] && say "  Staff console:              $URL/admin (token: ADMIN_TOKEN)"
 [ "$NOSECRETS" = 0 ] && say "  Your generated tokens are in .deploy/$NAME.secrets.env (mode 0600, git-ignored). Never paste them into chat or commit them."
 say "  Next: bash scripts/smoke.sh ${URL:-<url>}   |   docs/DEPLOY.md."
-rc=0; finish_code || rc=$?
-exit "$rc"

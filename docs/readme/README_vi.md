@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-Tập lệnh đăng nhập cho bạn bằng `wrangler login --device` (bạn duyệt một mã trong trình duyệt; nó không bao giờ tạo tài khoản), triển khai, tạo các token riêng của cầu nối và tải bí mật lên qua stdin. Các cách khác (Cloudflare API không cần đăng nhập, bí mật tự cấp) có trong [docs/DEPLOY.md](../DEPLOY.md). Cách dùng `wrangler` mới chỉ được chạy thử khô (dry run); cách dùng API đã được chạy thật ([trạng thái](../STATUS.md)).
+Tập lệnh đăng nhập cho bạn bằng `wrangler login --device` (bạn duyệt một mã trong trình duyệt; nó không bao giờ tạo tài khoản), triển khai, tạo các token riêng của cầu nối và tải bí mật lên qua stdin. Các cách khác (Cloudflare API không cần đăng nhập, bí mật tự cấp) có trong [docs/DEPLOY.md](../DEPLOY.md). Quy trình thiết lập đã được chứng minh chạy thật trên 2 tài khoản khác nhau ([trạng thái](../STATUS.md)).
 
 ### 3. Kết nối Meta và tác tử của bạn
 

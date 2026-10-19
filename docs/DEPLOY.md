@@ -34,7 +34,7 @@ The Cloudflare account may already have Workers: list them before you deploy (`n
 
 ## After the deploy
 
-1. `bash scripts/smoke.sh https://<worker>.<your-subdomain>.workers.dev` (unauthenticated checks; sends no secret). A new Worker or a new workers.dev subdomain can take a few minutes to answer, so the whole suite is retried every 10 s (`SMOKE_INTERVAL`) for up to 300 s (`--wait SECONDS`; `--wait 0` runs it once) and ends with `SMOKE PASS` (exit 0) or `SMOKE FAIL` (exit 1). A check that fails for a real reason is only reported after the wait. For a bare liveness probe, `GET /api/health` answers 200 `{"ok":true,"version":"<package version>"}`: no secrets, counts or message data, and no storage read.
+1. `bash scripts/smoke.sh https://<worker>.<your-subdomain>.workers.dev` (unauthenticated checks; sends no secret; each check is retried with backoff for up to about 3 minutes in total, set by `SMOKE_RETRY_SECONDS`, so a brand-new route does not fail falsely). For a bare liveness probe, `GET /api/health` answers 200 `{"ok":true,"version":"<package version>"}`: no secrets, counts or message data, and no storage read.
 2. Finish the Meta side: [META-CHECKLIST.md](META-CHECKLIST.md), tooling in [META-SETUP.md](META-SETUP.md).
 3. Connect your agent: [WAKE-ROUTINE.md](WAKE-ROUTINE.md).
 4. Stay in test mode until a message round-trips: `LAUNCH_MODE=test`, auto-reply paused, `TEST_RECIPIENTS` set. Only then set `LAUNCH_MODE=live` and activate auto-reply in `/admin`.

@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-스크립트는 `wrangler login --device`로 로그인하고(브라우저에서 코드를 승인하며, 계정은 만들지 않습니다), 배포하고, 브리지 자체의 토큰을 생성하며, stdin으로 비밀 값을 업로드합니다. 다른 경로(로그인 없는 Cloudflare API, 자체 프로비저닝 비밀 값)는 [docs/DEPLOY.md](../DEPLOY.md)에 있습니다. `wrangler` 경로는 드라이런으로만 실행되었고, API 경로는 실제로 실행되었습니다([상태](../STATUS.md)).
+스크립트는 `wrangler login --device`로 로그인하고(브라우저에서 코드를 승인하며, 계정은 만들지 않습니다), 배포하고, 브리지 자체의 토큰을 생성하며, stdin으로 비밀 값을 업로드합니다. 다른 경로(로그인 없는 Cloudflare API, 자체 프로비저닝 비밀 값)는 [docs/DEPLOY.md](../DEPLOY.md)에 있습니다. 설정은 서로 다른 2개 계정에서 실제로 검증되었습니다([상태](../STATUS.md)).
 
 ### 3. Meta와 에이전트 연결하기
 
