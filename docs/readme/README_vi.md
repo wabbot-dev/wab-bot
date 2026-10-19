@@ -30,7 +30,7 @@
 > Dự án này độc lập: không liên kết với và không được Meta hay xAI bảo trợ. WhatsApp và Grok là nhãn hiệu của chủ sở hữu tương ứng.
 
 > [!NOTE]
-> **Bản xem trước.** Đã kiểm thử cục bộ với đối tượng giả lập (291 bài kiểm thử tự động). Các bản trước đã chạy thực trên một tài khoản Cloudflare Free dùng một lần. Bằng chứng chạy thực trên số **thử nghiệm** miễn phí của Meta: **nhắn tin** đã chạy thực vào 2026-10-16 (một vòng tin nhắn thật: nhận một tin đến và gửi lại câu trả lời qua cầu nối), còn **gọi thoại** đã chạy thực vào 2026-10-17 bằng mã của kho này (Grok Voice qua Meta SIP tới xAI SIP): các cuộc gọi thoại WhatsApp đến được AI trả lời, hai bên trò chuyện qua lại (có cả tiếng Ả Rập), bản ghi chữ của cả hai bên được lưu, `end_call` của mô hình được Worker xử lý và yêu cầu cúp máy tới xAI được chấp nhận (HTTP 200), còn cổng gọi đã bật rồi tự tắt. Đây không phải số sản xuất đã xác minh doanh nghiệp; không hỗ trợ ghi âm. Dự án này chưa chạy trong môi trường sản xuất. Chủ sở hữu báo cáo rằng thiết kế nhắn tin đã được chứng minh trong sản xuất ở bản triển khai mà nó bắt nguồn (do chủ sở hữu báo cáo, ngày chưa xác định), điều này không phải là bằng chứng cho mã này. Mọi thứ đã được xác minh và cách xác minh: [docs/STATUS.md](../STATUS.md).
+> **Bản xem trước.** Đã kiểm thử cục bộ với đối tượng giả lập (335 bài kiểm thử tự động). Các bản trước đã chạy thực trên một tài khoản Cloudflare Free dùng một lần. Bằng chứng chạy thực trên số **thử nghiệm** miễn phí của Meta: **nhắn tin** đã chạy thực vào 2026-10-16 (một vòng tin nhắn thật: nhận một tin đến và gửi lại câu trả lời qua cầu nối), còn **gọi thoại** đã chạy thực vào 2026-10-17 bằng mã của kho này (Grok Voice qua Meta SIP tới xAI SIP): các cuộc gọi thoại WhatsApp đến được AI trả lời, hai bên trò chuyện qua lại (có cả tiếng Ả Rập), bản ghi chữ của cả hai bên được lưu, `end_call` của mô hình được Worker xử lý và yêu cầu cúp máy tới xAI được chấp nhận (HTTP 200), còn cổng gọi đã bật rồi tự tắt. Đây không phải số sản xuất đã xác minh doanh nghiệp; không hỗ trợ ghi âm. Dự án này chưa chạy trong môi trường sản xuất. Chủ sở hữu báo cáo rằng thiết kế nhắn tin đã được chứng minh trong sản xuất ở bản triển khai mà nó bắt nguồn (do chủ sở hữu báo cáo, ngày chưa xác định), điều này không phải là bằng chứng cho mã này. Mọi thứ đã được xác minh và cách xác minh: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -47,7 +47,7 @@ Bạn cần: một tài khoản Cloudflare do bạn sở hữu, Node.js 20+ (khu
 ```bash
 git clone https://github.com/wabbot-dev/wab-bot.git && cd wab-bot
 npm ci
-npm run check          # typecheck, 229 logic tests, 62 workerd tests, docs check
+npm run check          # typecheck, 271 logic tests, 64 workerd tests, docs check
 npm run build          # wrangler deploy --dry-run: bundle and binding check
 npm run smoke:local    # wrangler dev --local with random fake secrets
 ```

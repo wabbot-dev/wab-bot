@@ -29,7 +29,7 @@ There is deliberately **no tool** that creates a Cloudflare or xAI account, or t
 | Tool | Reads or changes | What it returns |
 |---|---|---|
 | `get_status` | read | Which settings and credentials are **present** (booleans and names, never values), launch mode, auto-reply state, webhook state as this Worker observed it (last handshake, last inbound message, rejected signatures), conversation counts, wake failures, calling state |
-| `setup_check` | read | A checklist of what is missing or risky, each with the fix; never a value |
+| `setup_check` | read | A checklist of what is missing or risky, each with the fix; never a value. With `WA_WABA_ID` set it also reads (GET only) whether your app is subscribed to the WhatsApp Business Account |
 | `list_conversations` | read | Redacted list: id, state, last two digits of the customer number, counts and statuses. No names, no text, no leases |
 | `get_conversation` | read | One conversation's metadata: state, reply records (status, kind, template name, Meta error code), wake log, last 50 messages as direction, type, time, status and length. Never the text |
 | `erase_conversation` | **destructive** | Erases one conversation through the same code as `DELETE /api/admin/conversations/<id>`. Needs `confirm` equal to the conversation id |

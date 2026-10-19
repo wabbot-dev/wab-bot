@@ -30,7 +30,7 @@
 > Dieses Projekt ist unabhängig: Es ist weder mit Meta oder xAI verbunden noch von ihnen unterstützt. WhatsApp und Grok sind Marken ihrer jeweiligen Inhaber.
 
 > [!NOTE]
-> **Vorschau.** Lokal gegen Fakes getestet (291 automatisierte Tests). Frühere Revisionen liefen live auf einem Wegwerf-Cloudflare-Free-Konto. Live-Belege auf Metas kostenloser **Test**-Nummer: **Texten** wurde am 2026-10-16 live ausgeführt (ein echter Text-Hin-und-Zurück: eine eingehende Nachricht kam an, und eine Antwort ging über die Brücke zurück), **Anrufe** am 2026-10-17 mit dem Code dieses Repositorys (Grok Voice über Meta SIP zu xAI SIP): Eingehende WhatsApp-Sprachanrufe wurden von der KI angenommen, das Gespräch lief in beide Richtungen (auch auf Arabisch), Transkripte beider Seiten wurden gespeichert, das `end_call` des Modells wurde vom Worker verarbeitet und xAIs Auflege-Anfrage wurde angenommen (HTTP 200), und das Anruf-Tor wurde scharf- und automatisch wieder abgeschaltet. Keine geschäftsverifizierte Produktionsnummer; Audioaufzeichnung wird nicht unterstützt. Von diesem Projekt nicht in der Produktion betrieben. Das Messaging-Design ist laut seinem Eigentümer in dem Deployment, aus dem es abgeleitet wurde, in der Produktion bewährt (vom Eigentümer berichtet, Datum offen), was kein Beleg für diesen Code ist. Alles Verifizierte und wie: [docs/STATUS.md](../STATUS.md).
+> **Vorschau.** Lokal gegen Fakes getestet (335 automatisierte Tests). Frühere Revisionen liefen live auf einem Wegwerf-Cloudflare-Free-Konto. Live-Belege auf Metas kostenloser **Test**-Nummer: **Texten** wurde am 2026-10-16 live ausgeführt (ein echter Text-Hin-und-Zurück: eine eingehende Nachricht kam an, und eine Antwort ging über die Brücke zurück), **Anrufe** am 2026-10-17 mit dem Code dieses Repositorys (Grok Voice über Meta SIP zu xAI SIP): Eingehende WhatsApp-Sprachanrufe wurden von der KI angenommen, das Gespräch lief in beide Richtungen (auch auf Arabisch), Transkripte beider Seiten wurden gespeichert, das `end_call` des Modells wurde vom Worker verarbeitet und xAIs Auflege-Anfrage wurde angenommen (HTTP 200), und das Anruf-Tor wurde scharf- und automatisch wieder abgeschaltet. Keine geschäftsverifizierte Produktionsnummer; Audioaufzeichnung wird nicht unterstützt. Von diesem Projekt nicht in der Produktion betrieben. Das Messaging-Design ist laut seinem Eigentümer in dem Deployment, aus dem es abgeleitet wurde, in der Produktion bewährt (vom Eigentümer berichtet, Datum offen), was kein Beleg für diesen Code ist. Alles Verifizierte und wie: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -47,7 +47,7 @@ Sie benötigen: ein Cloudflare-Konto, das Ihnen gehört, Node.js 20+ (22 empfohl
 ```bash
 git clone https://github.com/wabbot-dev/wab-bot.git && cd wab-bot
 npm ci
-npm run check          # typecheck, 229 logic tests, 62 workerd tests, docs check
+npm run check          # typecheck, 271 logic tests, 64 workerd tests, docs check
 npm run build          # wrangler deploy --dry-run: bundle and binding check
 npm run smoke:local    # wrangler dev --local with random fake secrets
 ```

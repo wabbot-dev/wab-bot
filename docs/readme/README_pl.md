@@ -30,7 +30,7 @@
 > Ten projekt jest niezależny: nie jest powiązany z Meta ani xAI ani przez nie zatwierdzony. WhatsApp i Grok są znakami towarowymi ich właścicieli.
 
 > [!NOTE]
-> **Wersja zapoznawcza.** Przetestowano lokalnie na atrapach (291 testów automatycznych). Wcześniejsze rewizje działały na żywo na jednorazowym koncie Cloudflare Free. Dowody na żywo na bezpłatnym numerze **testowym** Meta: **wiadomości tekstowe** uruchomiono na żywo 2026-10-16 (prawdziwa wymiana tekstu: odebrano wiadomość przychodzącą i odpowiedź wyszła przez most), a **połączenia** 2026-10-17 z kodem z tego repozytorium (Grok Voice przez Meta SIP do xAI SIP): przychodzące połączenia głosowe WhatsApp odbierała sztuczna inteligencja, rozmowa toczyła się w obie strony (także po arabsku), zapisano transkrypcje obu stron, `end_call` modelu obsłużył Worker, a prośba o rozłączenie do xAI została przyjęta (HTTP 200), bramka połączeń uzbroiła się i sama rozbroiła. To nie jest numer produkcyjny zweryfikowany jako firma; nagrywanie dźwięku nie jest obsługiwane. Ten projekt nie uruchamiał go w produkcji. Właściciel zgłasza, że projekt obsługi wiadomości sprawdził się w produkcji we wdrożeniu, z którego pochodzi (zgłoszenie właściciela, data do ustalenia), co nie jest dowodem dla tego kodu. Wszystko, co zweryfikowano, i jak: [docs/STATUS.md](../STATUS.md).
+> **Wersja zapoznawcza.** Przetestowano lokalnie na atrapach (335 testów automatycznych). Wcześniejsze rewizje działały na żywo na jednorazowym koncie Cloudflare Free. Dowody na żywo na bezpłatnym numerze **testowym** Meta: **wiadomości tekstowe** uruchomiono na żywo 2026-10-16 (prawdziwa wymiana tekstu: odebrano wiadomość przychodzącą i odpowiedź wyszła przez most), a **połączenia** 2026-10-17 z kodem z tego repozytorium (Grok Voice przez Meta SIP do xAI SIP): przychodzące połączenia głosowe WhatsApp odbierała sztuczna inteligencja, rozmowa toczyła się w obie strony (także po arabsku), zapisano transkrypcje obu stron, `end_call` modelu obsłużył Worker, a prośba o rozłączenie do xAI została przyjęta (HTTP 200), bramka połączeń uzbroiła się i sama rozbroiła. To nie jest numer produkcyjny zweryfikowany jako firma; nagrywanie dźwięku nie jest obsługiwane. Ten projekt nie uruchamiał go w produkcji. Właściciel zgłasza, że projekt obsługi wiadomości sprawdził się w produkcji we wdrożeniu, z którego pochodzi (zgłoszenie właściciela, data do ustalenia), co nie jest dowodem dla tego kodu. Wszystko, co zweryfikowano, i jak: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -47,7 +47,7 @@ Potrzebujesz: konta Cloudflare, którego jesteś właścicielem, Node.js 20+ (za
 ```bash
 git clone https://github.com/wabbot-dev/wab-bot.git && cd wab-bot
 npm ci
-npm run check          # typecheck, 229 logic tests, 62 workerd tests, docs check
+npm run check          # typecheck, 271 logic tests, 64 workerd tests, docs check
 npm run build          # wrangler deploy --dry-run: bundle and binding check
 npm run smoke:local    # wrangler dev --local with random fake secrets
 ```

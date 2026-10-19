@@ -30,7 +30,7 @@
 > Bu proje bağımsızdır: Meta veya xAI ile bağlantılı değildir ve onlar tarafından onaylanmamıştır. WhatsApp ve Grok, sahiplerinin ticari markalarıdır.
 
 > [!NOTE]
-> **Önizleme.** Yerelde sahte nesnelere karşı test edildi (291 otomatik test). Önceki sürümler tek kullanımlık bir Cloudflare Free hesabında canlı çalıştırıldı. Meta'nın ücretsiz **test** numarasındaki canlı kanıt: **mesajlaşma** 2026-10-16'da canlı çalıştırıldı (gerçek bir metin gidiş-dönüşü: gelen bir mesaj alındı ve köprü üzerinden yanıt gönderildi), **arama** ise 2026-10-17'de bu deponun koduyla canlı çalıştırıldı (Grok Voice, Meta SIP üzerinden xAI SIP'e): gelen WhatsApp sesli aramaları yapay zekâ tarafından yanıtlandı, konuşma iki yönlü oldu (Arapça dahil), iki tarafın dökümü de saklandı, modelin `end_call` çağrısı Worker tarafından işlendi ve xAI'nin kapatma isteği kabul edildi (HTTP 200); arama kapısı devreye girip kendiliğinden kapandı. İşletme doğrulaması yapılmış bir üretim numarası değildir; ses kaydı desteklenmez. Bu proje tarafından üretimde çalıştırılmadı. Mesajlaşma tasarımının, türetildiği dağıtımda üretimde kanıtlandığı sahibi tarafından bildirilmiştir (sahibinin beyanı, tarih belirlenecek); bu, bu kod için kanıt değildir. Doğrulanan her şey ve nasıl doğrulandığı: [docs/STATUS.md](../STATUS.md).
+> **Önizleme.** Yerelde sahte nesnelere karşı test edildi (335 otomatik test). Önceki sürümler tek kullanımlık bir Cloudflare Free hesabında canlı çalıştırıldı. Meta'nın ücretsiz **test** numarasındaki canlı kanıt: **mesajlaşma** 2026-10-16'da canlı çalıştırıldı (gerçek bir metin gidiş-dönüşü: gelen bir mesaj alındı ve köprü üzerinden yanıt gönderildi), **arama** ise 2026-10-17'de bu deponun koduyla canlı çalıştırıldı (Grok Voice, Meta SIP üzerinden xAI SIP'e): gelen WhatsApp sesli aramaları yapay zekâ tarafından yanıtlandı, konuşma iki yönlü oldu (Arapça dahil), iki tarafın dökümü de saklandı, modelin `end_call` çağrısı Worker tarafından işlendi ve xAI'nin kapatma isteği kabul edildi (HTTP 200); arama kapısı devreye girip kendiliğinden kapandı. İşletme doğrulaması yapılmış bir üretim numarası değildir; ses kaydı desteklenmez. Bu proje tarafından üretimde çalıştırılmadı. Mesajlaşma tasarımının, türetildiği dağıtımda üretimde kanıtlandığı sahibi tarafından bildirilmiştir (sahibinin beyanı, tarih belirlenecek); bu, bu kod için kanıt değildir. Doğrulanan her şey ve nasıl doğrulandığı: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -47,7 +47,7 @@ Müşterileriniz işletmenizin WhatsApp numarasına yazar. Meta her mesajı **ke
 ```bash
 git clone https://github.com/wabbot-dev/wab-bot.git && cd wab-bot
 npm ci
-npm run check          # typecheck, 229 logic tests, 62 workerd tests, docs check
+npm run check          # typecheck, 271 logic tests, 64 workerd tests, docs check
 npm run build          # wrangler deploy --dry-run: bundle and binding check
 npm run smoke:local    # wrangler dev --local with random fake secrets
 ```

@@ -30,7 +30,7 @@
 > Proyek ini independen: tidak berafiliasi dengan atau didukung oleh Meta maupun xAI. WhatsApp dan Grok adalah merek dagang pemiliknya masing-masing.
 
 > [!NOTE]
-> **Pratinjau.** Diuji secara lokal terhadap tiruan (291 pengujian otomatis). Revisi sebelumnya berjalan langsung di akun Cloudflare Free sekali pakai. Bukti langsung pada nomor **uji** gratis Meta: **pesan teks** dijalankan langsung pada 2026-10-16 (bolak-balik teks sungguhan: satu pesan masuk diterima dan balasan terkirim lewat jembatan), dan **panggilan** dijalankan langsung pada 2026-10-17 dengan kode repositori ini (Grok Voice lewat Meta SIP ke xAI SIP): panggilan suara WhatsApp masuk dijawab oleh AI, percakapan berjalan dua arah (termasuk bahasa Arab), transkrip kedua pihak tersimpan, `end_call` dari model ditangani Worker dan permintaan menutup panggilan ke xAI diterima (HTTP 200), dan gerbang panggilan aktif lalu menonaktifkan diri secara otomatis. Bukan nomor produksi yang terverifikasi bisnis; perekaman audio tidak didukung. Tidak dijalankan oleh proyek ini di produksi. Pemiliknya melaporkan bahwa desain pesan terbukti di produksi pada deployment asalnya (laporan pemilik, tanggal menyusul), yang bukan bukti untuk kode ini. Semua yang terverifikasi dan caranya: [docs/STATUS.md](../STATUS.md).
+> **Pratinjau.** Diuji secara lokal terhadap tiruan (335 pengujian otomatis). Revisi sebelumnya berjalan langsung di akun Cloudflare Free sekali pakai. Bukti langsung pada nomor **uji** gratis Meta: **pesan teks** dijalankan langsung pada 2026-10-16 (bolak-balik teks sungguhan: satu pesan masuk diterima dan balasan terkirim lewat jembatan), dan **panggilan** dijalankan langsung pada 2026-10-17 dengan kode repositori ini (Grok Voice lewat Meta SIP ke xAI SIP): panggilan suara WhatsApp masuk dijawab oleh AI, percakapan berjalan dua arah (termasuk bahasa Arab), transkrip kedua pihak tersimpan, `end_call` dari model ditangani Worker dan permintaan menutup panggilan ke xAI diterima (HTTP 200), dan gerbang panggilan aktif lalu menonaktifkan diri secara otomatis. Bukan nomor produksi yang terverifikasi bisnis; perekaman audio tidak didukung. Tidak dijalankan oleh proyek ini di produksi. Pemiliknya melaporkan bahwa desain pesan terbukti di produksi pada deployment asalnya (laporan pemilik, tanggal menyusul), yang bukan bukti untuk kode ini. Semua yang terverifikasi dan caranya: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -47,7 +47,7 @@ Anda memerlukan: akun Cloudflare milik Anda sendiri, Node.js 20+ (disarankan 22)
 ```bash
 git clone https://github.com/wabbot-dev/wab-bot.git && cd wab-bot
 npm ci
-npm run check          # typecheck, 229 logic tests, 62 workerd tests, docs check
+npm run check          # typecheck, 271 logic tests, 64 workerd tests, docs check
 npm run build          # wrangler deploy --dry-run: bundle and binding check
 npm run smoke:local    # wrangler dev --local with random fake secrets
 ```

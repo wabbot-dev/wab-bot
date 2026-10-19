@@ -30,7 +30,7 @@
 > 本项目是独立项目：与 Meta 或 xAI 无关联，也未获其认可。WhatsApp 和 Grok 是其各自所有者的商标。
 
 > [!NOTE]
-> **预览版。** 已在本地针对模拟对象测试（291 项自动化测试）。早期版本曾在一次性的 Cloudflare Free 账户上实际运行。在 Meta 免费**测试**号码上的实测证据：**文字消息**于 2026-10-16 实测运行（一次真实的文字往返：收到一条入站消息，并通过桥接发回了回复）；**语音通话**于 2026-10-17 使用本仓库的代码实测运行（Grok Voice 经 Meta SIP 连接 xAI SIP）：WhatsApp 语音来电由 AI 接听，双向交谈（包括阿拉伯语），双方的转录文本均已保存，Worker 处理了模型的 `end_call`，xAI 接受了挂断请求（HTTP 200），通话开关完成布防并自动撤防。这不是经商业验证的生产号码；不支持音频录制。本项目未在生产环境中运行过。消息部分的设计据其所有者称已在其衍生来源的部署中经生产验证（所有者自述，日期待定），这并不构成对本代码的证据。已验证的全部内容及验证方式：[docs/STATUS.md](../STATUS.md)。
+> **预览版。** 已在本地针对模拟对象测试（335 项自动化测试）。早期版本曾在一次性的 Cloudflare Free 账户上实际运行。在 Meta 免费**测试**号码上的实测证据：**文字消息**于 2026-10-16 实测运行（一次真实的文字往返：收到一条入站消息，并通过桥接发回了回复）；**语音通话**于 2026-10-17 使用本仓库的代码实测运行（Grok Voice 经 Meta SIP 连接 xAI SIP）：WhatsApp 语音来电由 AI 接听，双向交谈（包括阿拉伯语），双方的转录文本均已保存，Worker 处理了模型的 `end_call`，xAI 接受了挂断请求（HTTP 200），通话开关完成布防并自动撤防。这不是经商业验证的生产号码；不支持音频录制。本项目未在生产环境中运行过。消息部分的设计据其所有者称已在其衍生来源的部署中经生产验证（所有者自述，日期待定），这并不构成对本代码的证据。已验证的全部内容及验证方式：[docs/STATUS.md](../STATUS.md)。
 
 ---
 
@@ -47,7 +47,7 @@
 ```bash
 git clone https://github.com/wabbot-dev/wab-bot.git && cd wab-bot
 npm ci
-npm run check          # typecheck, 229 logic tests, 62 workerd tests, docs check
+npm run check          # typecheck, 271 logic tests, 64 workerd tests, docs check
 npm run build          # wrangler deploy --dry-run: bundle and binding check
 npm run smoke:local    # wrangler dev --local with random fake secrets
 ```

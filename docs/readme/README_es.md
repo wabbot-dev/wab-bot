@@ -30,7 +30,7 @@
 > Este proyecto es independiente: no está afiliado a Meta ni a xAI ni cuenta con su respaldo. WhatsApp y Grok son marcas de sus respectivos propietarios.
 
 > [!NOTE]
-> **Vista previa.** Probado en local contra simulaciones (291 pruebas automáticas). Las revisiones anteriores se ejecutaron en vivo en una cuenta desechable de Cloudflare Free. Evidencia en vivo en el número de **prueba** gratuito de Meta: el **texto** se ejecutó en vivo el 2026-10-16 (un intercambio real de texto: se recibió un mensaje entrante y se devolvió una respuesta a través del puente), y las **llamadas** se ejecutaron en vivo el 2026-10-17 con el código de este repositorio (Grok Voice sobre Meta SIP hacia xAI SIP): la IA atendió llamadas de voz entrantes de WhatsApp, la conversación fue en ambos sentidos (también en árabe), se guardaron las transcripciones de ambas partes, el Worker gestionó el `end_call` del modelo y xAI aceptó la petición de colgar (HTTP 200), y la compuerta de llamadas se armó y se desarmó sola. No es un número de producción verificado como empresa; no se admite grabar el audio. Este proyecto no lo ha ejecutado en producción. Su propietario informa de que el diseño de mensajería está probado en producción en el despliegue del que deriva (informado por el propietario, fecha por determinar), lo cual no es evidencia de este código. Todo lo verificado y cómo: [docs/STATUS.md](../STATUS.md).
+> **Vista previa.** Probado en local contra simulaciones (335 pruebas automáticas). Las revisiones anteriores se ejecutaron en vivo en una cuenta desechable de Cloudflare Free. Evidencia en vivo en el número de **prueba** gratuito de Meta: el **texto** se ejecutó en vivo el 2026-10-16 (un intercambio real de texto: se recibió un mensaje entrante y se devolvió una respuesta a través del puente), y las **llamadas** se ejecutaron en vivo el 2026-10-17 con el código de este repositorio (Grok Voice sobre Meta SIP hacia xAI SIP): la IA atendió llamadas de voz entrantes de WhatsApp, la conversación fue en ambos sentidos (también en árabe), se guardaron las transcripciones de ambas partes, el Worker gestionó el `end_call` del modelo y xAI aceptó la petición de colgar (HTTP 200), y la compuerta de llamadas se armó y se desarmó sola. No es un número de producción verificado como empresa; no se admite grabar el audio. Este proyecto no lo ha ejecutado en producción. Su propietario informa de que el diseño de mensajería está probado en producción en el despliegue del que deriva (informado por el propietario, fecha por determinar), lo cual no es evidencia de este código. Todo lo verificado y cómo: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -47,7 +47,7 @@ Necesitas: una cuenta de Cloudflare de tu propiedad, Node.js 20+ (se recomienda 
 ```bash
 git clone https://github.com/wabbot-dev/wab-bot.git && cd wab-bot
 npm ci
-npm run check          # typecheck, 229 logic tests, 62 workerd tests, docs check
+npm run check          # typecheck, 271 logic tests, 64 workerd tests, docs check
 npm run build          # wrangler deploy --dry-run: bundle and binding check
 npm run smoke:local    # wrangler dev --local with random fake secrets
 ```
