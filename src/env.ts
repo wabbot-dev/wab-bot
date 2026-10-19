@@ -44,6 +44,10 @@ export interface Env {
   WAKE_TYPES?: string;
   WA_PHONE_NUMBER_IDS?: string;
   WA_TEMPLATE_ALLOWLIST?: string;
+  WA_WABA_ID?: string;
+  WA_APP_ID?: string;
+  // owner-only binding (never self-provisioned): numbers a bot-started message may reach before they ever wrote in
+  OUTREACH_ALLOWLIST?: string;
   GRAPH_VERSION?: string;
   LAUNCH_MODE?: string;
   TEST_RECIPIENTS?: string;

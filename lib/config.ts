@@ -4,6 +4,12 @@ export interface Config {
   waVerifyToken?: string;
   phoneNumberIds: string[]; // empty = accept all
   templateAllowlist: string[]; // empty = no templates
+  /** WA_WABA_ID: the WhatsApp Business Account id. Needed to address a number that has no conversation yet (start_conversation with `to`). */
+  wabaId?: string;
+  /** WA_APP_ID: the owner's Meta app id (optional). setup_check uses it to confirm that this app is subscribed to the WABA. */
+  appId?: string;
+  /** OUTREACH_ALLOWLIST (owner-only binding, digits, empty by default): numbers a bot-started message may reach before they ever wrote in */
+  outreachAllowlist: string[];
   graphVersion: string;
   launchMode: "live" | "test";
   testRecipients: string[];
@@ -100,6 +106,9 @@ export function loadConfig(env: Env): Config {
     waVerifyToken: env.WA_VERIFY_TOKEN || undefined,
     phoneNumberIds: list(env.WA_PHONE_NUMBER_IDS),
     templateAllowlist: list(env.WA_TEMPLATE_ALLOWLIST),
+    wabaId: /^\d{5,25}$/.test(env.WA_WABA_ID?.trim() ?? "") ? env.WA_WABA_ID!.trim() : undefined,
+    appId: /^\d{5,25}$/.test(env.WA_APP_ID?.trim() ?? "") ? env.WA_APP_ID!.trim() : undefined,
+    outreachAllowlist: list(env.OUTREACH_ALLOWLIST).map(digits).filter(Boolean),
     graphVersion: env.GRAPH_VERSION?.trim() || "v25.0",
     // Fail-safe: anything other than exactly "live" is test mode.
     launchMode: env.LAUNCH_MODE?.trim().toLowerCase() === "live" ? "live" : "test",

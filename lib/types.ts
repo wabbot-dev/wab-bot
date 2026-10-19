@@ -41,6 +41,8 @@ export interface OutRec {
   status: OutStatus;
   wamid?: string;
   kind: "text" | "template";
+  /** who started the send: the agent's reply (default), a bot-started message (start_conversation) or a staff reply from the inbox */
+  origin?: "reply" | "outreach" | "staff";
   template?: string;
   error?: string;
   metaErrorCode?: number;
@@ -75,6 +77,8 @@ export interface Conv {
   wake: WakeState;
   escalation?: { reason: string; at: number };
   hold?: { reason: string; at: number; replyKey?: string };
+  /** set by an inbound STOP (or a staff action); START clears it. Every bot-started send is refused while set. */
+  optOut?: { at: number; via: "customer" | "staff" };
   createdAt: number;
   updatedAt: number;
   /** set by the admin delete_conversation action; the store drops the record on that same commit */

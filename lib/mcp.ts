@@ -6,7 +6,7 @@ import { getOverview, type SecretsInfo } from "./overview";
 import { InvalidParams, serveJsonRpc, type Args, type ToolMeta } from "./mcp-rpc";
 import {
   claimConversation, escalateConversation, finishConversation, getControls, getHistory, listPending,
-  releaseConversation, sendReply,
+  releaseConversation, sendReply, startConversation,
 } from "./tools";
 
 /** Agent MCP route (`/mcp`, Bearer MCP_TOKEN). The JSON-RPC core is shared with the admin route: lib/mcp-rpc.ts. */
@@ -95,6 +95,40 @@ const TOOLS: Tool[] = [
         template_language: str(a, "template_language", { max: 20 }),
         template_params: tp as string[] | undefined,
         idempotency_key: str(a, "idempotency_key", { max: 100 }),
+      });
+    },
+  },
+  {
+    name: "start_conversation",
+    description:
+      "Start a message yourself (no lease): a reminder the customer asked for, or a follow-up on an open case. Never marketing. " +
+      "Give conversation_id, or `to` (digits) for a number on the owner's outreach allowlist. Provide text (only inside the 24-hour window) OR an allowlisted template_name. " +
+      "idempotency_key is REQUIRED and must be stable per reminder (a retry with the same key never sends twice). Refused, with no Meta call, for: no prior inbound, opted out, human takeover, held, escalated, an active conversation (use send_reply), auto-reply paused, test-mode recipients, a non-allowlisted template, rate limits.",
+    inputSchema: obj(
+      {
+        conversation_id: convSchema,
+        to: { type: "string", pattern: "^\\+?[0-9]{6,20}$", description: "customer number, digits (only for numbers that have no conversation yet)" },
+        text: { type: "string", maxLength: 4000 },
+        template_name: { type: "string", maxLength: 100 },
+        template_language: { type: "string", maxLength: 20 },
+        template_params: { type: "array", maxItems: 20, items: { type: "string", maxLength: 1000 } },
+        idempotency_key: { type: "string", minLength: 1, maxLength: 100 },
+      },
+      ["idempotency_key"],
+    ),
+    run: (ctx, a) => {
+      const tp = a.template_params;
+      if (tp !== undefined && (!Array.isArray(tp) || tp.length > 20 || tp.some((x) => typeof x !== "string" || x.length > 1000))) throw new InvalidParams("template_params must be up to 20 strings of at most 1000 characters");
+      const to = str(a, "to", { min: 6, max: 21 });
+      if (to !== undefined && !/^\+?[0-9]{6,20}$/.test(to)) throw new InvalidParams("to must be digits (6..20), optionally with a leading +");
+      return startConversation(ctx, {
+        conversation_id: conv(a, false),
+        to,
+        text: str(a, "text", { max: 4000 }),
+        template_name: str(a, "template_name", { max: 100 }),
+        template_language: str(a, "template_language", { max: 20 }),
+        template_params: tp as string[] | undefined,
+        idempotency_key: str(a, "idempotency_key", { min: 1, max: 100, required: true }),
       });
     },
   },
