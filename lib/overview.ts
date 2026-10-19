@@ -35,9 +35,11 @@ export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promis
   let scheduledWakes = 0;
   let earliestRetry: number | undefined;
   let lastInbound: number | undefined;
+  let optedOut = 0;
   for (const r of items) {
     const c = normalize(structuredClone(r.value), now);
     byState[c.state] = (byState[c.state] ?? 0) + 1;
+    if (c.optOut) optedOut++;
     if (c.lastInboundAt !== undefined && (lastInbound === undefined || c.lastInboundAt > lastInbound)) lastInbound = c.lastInboundAt;
     if (c.wake.status === "failed") {
       failedWakes++;
@@ -63,6 +65,7 @@ export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promis
       held_for_review: byState.held_for_review,
       escalated: byState.escalated,
       human_takeover: byState.human_takeover,
+      opted_out: optedOut,
       oldest_pending_age_seconds: oldestPending ? Math.max(0, Math.floor((now - oldestPending.since) / 1000)) : null,
       oldest_pending_conversation_id: oldestPending?.id ?? null,
       last_inbound_at: iso(lastInbound),

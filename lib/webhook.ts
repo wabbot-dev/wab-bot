@@ -95,6 +95,17 @@ interface Incoming {
   name?: string;
 }
 
+/** Opt-out keywords (whole message, trimmed, case-insensitive). START clears an opt-out. */
+const STOP_WORDS = new Set(["STOP", "UNSUBSCRIBE", "ARRET", "ARRÊT", "إيقاف"]);
+const OPT_TYPES = new Set(["text", "button", "interactive"]);
+export function optKeyword(type: string, text: string): "stop" | "start" | null {
+  if (!OPT_TYPES.has(type)) return null;
+  const t = text.trim().replace(/[.!]+$/, "").toLocaleUpperCase();
+  if (STOP_WORDS.has(t)) return "stop";
+  if (t === "START") return "start";
+  return null;
+}
+
 function tsMs(sec: string | undefined, now: number): number {
   const n = Number(sec);
   return Number.isFinite(n) && n > 0 ? Math.min(now, n * 1000) : now;
@@ -127,6 +138,10 @@ async function applyInbound(
       }
       c.messages.push(msg);
       if (m.name) c.name = m.name;
+      // The message is still stored and still wakes the agent (it may confirm); only bot-started sends are refused while opted out.
+      const kw = optKeyword(m.type, m.text);
+      if (kw === "stop") c.optOut = { at: m.ts, via: "customer" };
+      else if (kw === "start") c.optOut = undefined;
       if (ctx.cfg.wakeTypes.includes(m.type)) { c.unhandled++; wakeable = true; }
     }
     if (c.seenIds.length > MAX_SEEN_IDS) c.seenIds.splice(0, c.seenIds.length - MAX_SEEN_IDS);
