@@ -208,6 +208,6 @@ say
 say "Done. Worker: ${URL:-<see the wrangler output above>}"
 [ -n "$URL" ] && say "  Meta webhook callback URL:  $URL/api/webhook"
 [ -n "$URL" ] && say "  Agent MCP endpoint:         $URL/mcp   (Authorization: Bearer <MCP_TOKEN>)"
-[ -n "$URL" ] && say "  Staff console:              $URL/admin (token: ADMIN_TOKEN)"
+[ -n "$URL" ] && say "  Team inbox:                 $URL/admin (staff sign in with a one-time code: POST /api/admin {\"action\":\"staff_invite\"})"
 [ "$NOSECRETS" = 0 ] && say "  Your generated tokens are in .deploy/$NAME.secrets.env (mode 0600, git-ignored). Never paste them into chat or commit them."
 say "  Next: bash scripts/smoke.sh ${URL:-<url>}   |   docs/DEPLOY.md."

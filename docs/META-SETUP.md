@@ -38,6 +38,21 @@ Never paste a secret into a chat or a command line. The deploy script and `scrip
 
 `/api/admin/meta-setup` is **off by default** (404). Set `META_SETUP_ENABLED=1` only while you use it, then remove it. It needs `ADMIN_TOKEN` and can mint a non-expiring token, which is why it is not left on. The local script above is the recommended path. `META_SETUP_DRY_RUN=1` makes the route answer from a built-in stub and never call `graph.facebook.com`.
 
+## Subscribe your app to the WABA (always), then read it back
+
+The most common reason the first WhatsApp message never arrives: the webhook is configured, but the owner's app is not subscribed to the WhatsApp Business Account (often only Meta's own test app is). The `subscribed_apps` step is in the default run; to run it alone:
+
+```bash
+curl -s -X POST https://<worker>/api/admin/meta-setup -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: application/json" \
+  --data '{"action":"subscribed_apps","waba_id":"<WABA_ID>"}'
+```
+
+It reads `GET /{WABA_ID}/subscribed_apps`, subscribes with `POST` only if your app is missing, and reads it back. The step's facts list `before_app_ids` and `after_app_ids` (ids only); a `WARN` (`subscribed_apps_other_apps`) says when other apps were subscribed but yours was not. PASS only when your app id is listed afterwards. Later, the admin MCP `setup_check` repeats the read (GET only) when `WA_WABA_ID` is set (`WA_APP_ID` makes it exact).
+
+## Keep the minted token inside the Worker (`store_token`)
+
+With `mint_token: true, store_token: true` (instead of `return_token: true`) the system-user token is minted, verified with `debug_token`, and written straight into this Worker's own secret store (the same store as `POST /api/admin/secrets`). It never appears in the response, a log or a chat; the step `system_user_token_stored` reports PASS, or WARN if a `WA_ACCESS_TOKEN` secret binding overrides it. If storing fails, the token falls back to the one-time `secret_delivery`.
+
 ## Call details
 
 [META-API-CONFORMANCE.md](META-API-CONFORMANCE.md) lists each Graph call, what the documentation says and where it is ambiguous. Apart from the calls named on that page as run live, all of it is tested against a fake only.

@@ -10,7 +10,7 @@
 **WAB bot: AI auto-reply and voice answering for business chat on the WhatsApp Cloud API.** A small, single-tenant bridge: customers message (or call) your WhatsApp Cloud API number, your agent answers through guarded tools, and nothing leaves your accounts.
 
 [![MIT license](https://img.shields.io/badge/license-MIT-f4c430?style=flat-square)](LICENSE)
-[![status: preview v0.1.0](https://img.shields.io/badge/status-preview_v0.1.0-orange?style=flat-square)](docs/STATUS.md)
+[![status: preview v0.2.0](https://img.shields.io/badge/status-preview_v0.2.0-orange?style=flat-square)](docs/STATUS.md)
 [![Cloudflare Workers](https://img.shields.io/badge/runs_on-Cloudflare_Workers-f38020?style=flat-square&logo=cloudflare&logoColor=white)](docs/CLOUDFLARE.md)
 [![runtime dependencies: 0](https://img.shields.io/badge/runtime_dependencies-0-2ea44f?style=flat-square)](THIRD_PARTY_NOTICES.md)
 [![CI](https://github.com/wabbot-dev/wab-bot/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
@@ -85,7 +85,9 @@ Every webhook must carry a valid `X-Hub-Signature-256` over the raw body. One SQ
 |---|---|
 | Receive WhatsApp text and store it per conversation, de-duplicated, with HMAC verification | Tested locally; one real message received on Meta's test number ([status](docs/STATUS.md)) |
 | Agent tools over MCP: `list_pending`, `claim_conversation`, `get_history`, `send_reply` (16 server-side guards), `finish`, `release`, `escalate`, `get_controls`, read-only `get_overview` | Tested locally and with direct JSON-RPC calls; **not** with real MCP clients. One real reply sent on Meta's test number, driven by hand |
-| Staff console: pause and resume auto-reply, take over, release, reopen, resolve, wake, erase | Tested locally. Static page, token required |
+| Team inbox at /admin: conversation list and chat view side by side (one pane on a phone), a Needs-a-human queue, unread counts, search, staff replies, take over, release to the bot, resolve, opt-out, erase, refresh every 10 seconds; staff sign in with a one-time code, never the admin token | Tested locally and in workerd. New in 0.2.0; not yet used by a real team |
+| Bot-started messages (a reminder the customer asked for, a follow-up on an open case; never marketing): only to numbers that wrote in before or that the owner allowlisted, templates only outside the 24-hour window, refused after STOP, during a human takeover or in test mode for other numbers | Tested locally; the blocked cases and one template send run live on a test Worker (see the status page) |
+| Opt-out: STOP (and a few translations) blocks every bot-started message until START | Tested locally |
 | Erase one conversation (`DELETE /api/admin/conversations/<id>`) | Tested locally with mutation checks; never run live. Does not reach Cloudflare recovery copies ([privacy](docs/PRIVACY.md)) |
 | Wake your agent, debounced, with backoff and a daily retry | Verified live against a stand-in receiver; never against a real agent platform |
 | Retention: replied chats trimmed at 14 days, anything dropped at 180 days | Verified live with synthetic data; never over weeks on real data |

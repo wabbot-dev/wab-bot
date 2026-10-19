@@ -4,13 +4,30 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-19 (preview)
+
+### Features
+- **Bot-started messages:** new agent MCP tool `start_conversation` (no lease; `idempotency_key` required) for reminders the customer asked for and follow-ups on an open case, never marketing. It is refused with no Meta call when the number never wrote in (unless the owner put it on `OUTREACH_ALLOWLIST`), when the conversation is in human takeover, held, escalated or active (`conversation_active_use_send_reply`), after an opt-out, while auto-reply is paused, in test mode for numbers outside `TEST_RECIPIENTS`, for a non-allowlisted template, outside the 24-hour window for text, and by the same rate limits as `send_reply`. Every guard is re-checked inside the one atomic reserve commit. Owner batches: `POST /api/admin/start-conversation` runs the same function. New settings `WA_WABA_ID`, `WA_APP_ID`, `OUTREACH_ALLOWLIST`.
+- `send_reply`, `start_conversation` and staff replies share one delivery function (`deliver`): one Meta POST, then sent / failed / uncertain (held for review), with the same idempotency rules.
+- **Opt-out:** STOP, UNSUBSCRIBE, ARRET, ARRÊT or إيقاف (the whole message) marks the conversation opted out; START clears it. The message is still stored and still wakes the agent. Shown as `opted_out` in `get_history`, `get_controls`, the inbox and the admin conversation view; `get_overview` counts opted-out conversations. Staff actions `opt_out` / `opt_in`.
+- **Team inbox** at `/admin` replaces the staff table: conversation list and chat bubbles side by side (one pane at a time on a phone), a "Needs a human" queue, unread counts, search, a reply box (text inside the 24-hour window or an allowlisted template; replying takes the chat over from the bot), take over / release to the bot / resolve / release hold / wake / opt-out / erase, and a 10-second refresh while the tab is visible.
+- **Staff sign-in without the admin token:** `POST /api/admin {"action":"staff_invite"}` (owner token only) returns a one-time code (single use, 15 minutes by default, only its hash stored). `/admin` redeems it for an HttpOnly, Secure, SameSite=Strict session cookie (12 hours, signed with `ADMIN_TOKEN`). Changing requests with the cookie need `X-Staff-Request: 1`; a staff session cannot mint invites, start conversations or read secrets.
+- Meta setup `subscribed_apps` step: facts now list `before_app_ids` and `after_app_ids` (ids only), plus a WARN when other apps were subscribed but not yours. The admin MCP `setup_check` reads the WABA's subscribed apps (GET only) when `WA_WABA_ID` is set.
+- Meta setup `store_token: true` (with `mint_token`): the verified system-user token is written into the Worker's own secret store and never returned; falls back to the one-time delivery if storing fails.
+- `GET /api/health` liveness endpoint (`{ok, version}` only, no storage read).
+- New Cloudflare accounts: `scripts/cf-api-deploy.mjs` and `scripts/deploy-cloudflare.sh` (with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`) register a workers.dev subdomain first when the account has none (`--subdomain NAME`); an existing subdomain is never changed.
+
 ### Fixes
 - `scripts/deploy-cloudflare.sh` (wrangler route, `--set-secret` and `--self-provision`) now exits non-zero and names every required secret that was skipped or failed to upload (names only, never values); the final "Done" line is printed only when all of them were set.
 - `scripts/smoke.sh` retries each check with backoff (2s doubling, capped at 30s) within a shared budget of about 3 minutes (`SMOKE_RETRY_SECONDS`, default 180; `0` checks once; `SMOKE_RETRY_MAX_DELAY` caps the delay), so checks right after a deploy do not fail falsely, then fails with a summary of the checks still wrong.
 - Tests for both scripts against a fake wrangler and a local fake Worker (`tests/deploy-smoke-scripts.test.ts`).
 
+- `scripts/smoke.sh` also checks `GET /api/health`.
+
 ### Documentation
 - README (and all 19 translations), `docs/STATUS.md`: the setup has been proven live on 2 different accounts.
+- Cloudflare API token permissions (Workers Scripts: Edit only), show-once token handling, existing accounts (list Workers first, never touch others), the workers.dev subdomain step.
+- `docs/CONFIGURATION.md`: `start_conversation` guards and error codes, opt-out, team inbox and staff sign-in routes, new settings. `docs/META-SETUP.md`: subscribe-and-verify the app on the WABA, `store_token`. `docs/PRIVACY.md`: opt-out.
 
 ## [0.1.0] - 2026-10-17 (preview)
 

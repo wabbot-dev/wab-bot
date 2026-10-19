@@ -14,7 +14,7 @@
 **小さなシングルテナントのブリッジです。顧客があなたの WhatsApp Cloud API 番号にメッセージを送り、エージェントが保護されたツールを通じて返信し、何もあなたのアカウントの外に出ません。**
 
 [![MIT license](https://img.shields.io/badge/license-MIT-f4c430?style=flat-square)](../../LICENSE)
-[![status: preview v0.1.0](https://img.shields.io/badge/status-preview_v0.1.0-orange?style=flat-square)](../STATUS.md)
+[![status: preview v0.2.0](https://img.shields.io/badge/status-preview_v0.2.0-orange?style=flat-square)](../STATUS.md)
 [![Cloudflare Workers](https://img.shields.io/badge/runs_on-Cloudflare_Workers-f38020?style=flat-square&logo=cloudflare&logoColor=white)](../CLOUDFLARE.md)
 [![runtime dependencies: 0](https://img.shields.io/badge/runtime_dependencies-0-2ea44f?style=flat-square)](../../THIRD_PARTY_NOTICES.md)
 [![CI](https://github.com/wabbot-dev/wab-bot/actions/workflows/ci.yml/badge.svg)](../../.github/workflows/ci.yml)

@@ -14,7 +14,7 @@
 **작은 단일 테넌트 브리지입니다. 고객이 당신의 WhatsApp Cloud API 번호로 메시지를 보내면 에이전트가 보호된 도구를 통해 답하며, 어떤 것도 당신의 계정 밖으로 나가지 않습니다.**
 
 [![MIT license](https://img.shields.io/badge/license-MIT-f4c430?style=flat-square)](../../LICENSE)
-[![status: preview v0.1.0](https://img.shields.io/badge/status-preview_v0.1.0-orange?style=flat-square)](../STATUS.md)
+[![status: preview v0.2.0](https://img.shields.io/badge/status-preview_v0.2.0-orange?style=flat-square)](../STATUS.md)
 [![Cloudflare Workers](https://img.shields.io/badge/runs_on-Cloudflare_Workers-f38020?style=flat-square&logo=cloudflare&logoColor=white)](../CLOUDFLARE.md)
 [![runtime dependencies: 0](https://img.shields.io/badge/runtime_dependencies-0-2ea44f?style=flat-square)](../../THIRD_PARTY_NOTICES.md)
 [![CI](https://github.com/wabbot-dev/wab-bot/actions/workflows/ci.yml/badge.svg)](../../.github/workflows/ci.yml)

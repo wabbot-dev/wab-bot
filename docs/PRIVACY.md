@@ -23,6 +23,10 @@ Logs carry ids and counters only: no message text, names, phone numbers or token
 - Your agent and its model provider see whatever the MCP tools return. Check that provider's data policy. History text is wrapped in `<untrusted_customer_text>` so the agent can tell it from instructions.
 - Cloudflare hosts the data as your processor under its terms ([CLOUDFLARE.md](CLOUDFLARE.md)). Workers Free has no data-residency guarantee.
 
+## Opt-out
+
+A customer who sends STOP (or UNSUBSCRIBE, ARRET, ARRÊT, إيقاف) is marked opted out on their conversation; START clears it. While opted out, the bot can still answer a message the customer sends, but it cannot start a conversation (reminders, follow-ups). Staff can set or clear the flag in the team inbox. Details: [CONFIGURATION.md](CONFIGURATION.md#opt-out-stop--start).
+
 ## Retention
 
 - *Replied* conversations idle for 14 days keep only the last 10 messages (de-dup ids and outbound records are dropped). **Any** conversation idle for 180 days is dropped, whatever its state.
