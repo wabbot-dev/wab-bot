@@ -1,5 +1,5 @@
 import pkg from "../package.json" with { type: "json" };
-import { adminErase, adminGet, adminPost } from "../lib/admin";
+import { adminErase, adminGet, adminPost, adminStartConversation, staffLogin, staffLogout, staffSession } from "../lib/admin";
 import { handleCron } from "../lib/cron";
 import { createAdminMcpRoute } from "../lib/admin-mcp";
 import { disarmCalling, sweepCalling, type ArmDeps } from "../lib/calls-arm";
@@ -13,7 +13,7 @@ import { retryFailedWakes } from "../lib/wake";
 import type { Env } from "./env";
 import { ADMIN_HTML, HEALTH_HTML } from "./pages";
 import { getCtx } from "./runtime";
-import { ensureSecrets, handleAdminSecrets, handleSetup } from "./setup";
+import { ensureSecrets, handleAdminSecrets, handleSetup, storeSecrets } from "./setup";
 import { DurableRateLimiter, stateStub } from "./do-backend";
 
 export { BridgeState } from "./state-do";
@@ -98,13 +98,21 @@ async function route(req: Request, env: Env, exec: ExecutionContext): Promise<Re
       if (m === "GET") return adminGet(ctx(), req);
       if (m === "POST") return adminPost(ctx(), req);
       return methodNotAllowed("GET, POST");
+    case "/api/admin/start-conversation":
+      return m === "POST" ? adminStartConversation(ctx(), req) : methodNotAllowed("POST");
+    case "/api/staff/login":
+      return m === "POST" ? staffLogin(ctx(), req) : methodNotAllowed("POST");
+    case "/api/staff/logout":
+      return m === "POST" ? staffLogout() : methodNotAllowed("POST");
+    case "/api/staff/session":
+      return m === "GET" ? staffSession(ctx(), req) : methodNotAllowed("GET");
     case "/api/admin/meta-setup": {
       // Off unless META_SETUP_ENABLED=1 (set it only while running Meta setup, then delete it). Lazy import keeps it out of the hot path.
       const c = ctx();
       if (!c.cfg.metaSetupEnabled) return new Response(JSON.stringify({ error: "not_found" }), { status: 404, headers: { "Content-Type": "application/json" } });
       const { metaSetupGet, metaSetupPost } = await import("../lib/meta-setup");
       if (m === "GET") return metaSetupGet(c, req);
-      if (m === "POST") return metaSetupPost(c, req);
+      if (m === "POST") return metaSetupPost(c, req, { storeSecrets: (v) => storeSecrets(env, v) });
       return methodNotAllowed("GET, POST");
     }
     case "/api/cron/retry-wakes":

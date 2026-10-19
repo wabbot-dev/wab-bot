@@ -41,3 +41,5 @@ export const signBody = (rawBody: string, appSecret: string): string =>
   "sha256=" + createHmac("sha256", appSecret).update(rawBody).digest("hex");
 
 export const randomHex = (bytes: number): string => randomBytes(bytes).toString("hex");
+
+export const hmacHex = (key: string, msg: string): string => createHmac("sha256", key).update(msg).digest("hex");

@@ -66,10 +66,10 @@ describe("claim / reply / finish over MCP with the Durable Object store", () => 
     expect((await convOf(wa)).state).toBe("replied");
   });
 
-  it("the tool list has nine tools and send_reply has no recipient field", async () => {
+  it("the tool list has ten tools and send_reply has no recipient field", async () => {
     const j: any = await (await mcp("tools/list", {})).json();
     expect(j.result.tools.map((t: any) => t.name).sort()).toEqual([
-      "claim_conversation", "escalate_conversation", "finish_conversation", "get_controls", "get_history", "get_overview", "list_pending", "release_conversation", "send_reply",
+      "claim_conversation", "escalate_conversation", "finish_conversation", "get_controls", "get_history", "get_overview", "list_pending", "release_conversation", "send_reply", "start_conversation",
     ]);
     expect(Object.keys(j.result.tools.find((t: any) => t.name === "send_reply").inputSchema.properties)).not.toContain("to");
   });
@@ -175,6 +175,22 @@ describe("pages, headers, routing", () => {
     expect((await call("/api/health", { method: "POST", body: "{}" })).status).toBe(405);
     expect((await call("/api/health/")).status).toBe(200); // same trailing-slash rule as every other route
     expect(net.calls).toHaveLength(0);
+  });
+  it("team inbox: staff sign-in by one-time code over the real Worker; cookie session reads the inbox; owner-only routes stay closed", async () => {
+    expect((await call("/api/staff/session")).status).toBe(401);
+    expect((await call("/api/staff/login", { method: "POST", body: JSON.stringify({ code: "AAAA-BBBB-CCCC" }) })).status).toBe(401);
+    const inv = (await (await admin({ method: "POST", body: JSON.stringify({ action: "staff_invite" }) })).json()) as { code: string };
+    const login = await call("/api/staff/login", { method: "POST", body: JSON.stringify({ code: inv.code }) });
+    expect(login.status).toBe(200);
+    const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0]!;
+    expect(cookie).toMatch(/^wb_staff=\d{13}\.[0-9a-f]{64}$/);
+    expect((await call("/api/admin", { headers: { cookie } })).status).toBe(200);
+    expect((await call("/api/staff/session", { headers: { cookie } })).status).toBe(200);
+    expect((await call("/api/admin/secrets", { headers: { cookie } })).status).toBe(401);
+    expect((await call("/api/admin/start-conversation", { method: "POST", headers: { cookie, "X-Staff-Request": "1" }, body: "{}" })).status).toBe(401);
+    const page = await (await call("/admin")).text();
+    expect(page).toContain("Team inbox");
+    expect(page).toContain("/api/staff/login");
   });
   it("the page source contains no token or secret values", async () => {
     const t = await (await call("/admin")).text();

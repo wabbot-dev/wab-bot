@@ -5,12 +5,63 @@ import { CONTROLS_KEY, controlsOf, setAutoReply } from "./controls";
 import { readAll, REJECTIONS_KEY, update } from "./store";
 import type { Conv, Rejections } from "./types";
 import { armedOf, kickPendingWakes, runWake, type Armed } from "./wake";
+import { createInvite, redeemInvite, SESSION_MS, sessionCookie, sessionOf, sessionValue } from "./staff";
+import { staffReply, startConversation } from "./tools";
 
 type Json = Record<string, unknown>;
 const iso = (ms: number | undefined) => (ms === undefined ? null : new Date(ms).toISOString());
 
+/** Bearer ADMIN_TOKEN only (owner / owner's bot). Required for invites and anything outside the inbox. */
+export const ownerAuthorized = (ctx: Ctx, req: Request): boolean => tokenOk(bearerOf(req), ctx.cfg.adminToken);
+
+/**
+ * Inbox access: the owner's bearer token, OR a staff session cookie (lib/staff.ts). A cookie alone may read; a changing request
+ * made with the cookie must also carry `X-Staff-Request: 1`, which a cross-site page cannot add without a CORS preflight.
+ */
 export function adminAuthorized(ctx: Ctx, req: Request): boolean {
-  return tokenOk(bearerOf(req), ctx.cfg.adminToken);
+  if (ownerAuthorized(ctx, req)) return true;
+  if (sessionOf(req, ctx.cfg.adminToken, ctx.now()) === null) return false;
+  return req.method === "GET" || req.method === "HEAD" || req.headers.get("x-staff-request") === "1";
+}
+
+const JSONH = { "Content-Type": "application/json", "Cache-Control": "no-store" };
+
+/** POST /api/staff/login {code}: redeem a one-time invite, set the session cookie. Same 401 for every failure. */
+export async function staffLogin(ctx: Ctx, req: Request): Promise<Response> {
+  let code: unknown;
+  try { code = ((await req.json()) as { code?: unknown })?.code; } catch { /* fall through */ }
+  const ok = typeof code === "string" && !!ctx.cfg.adminToken && ctx.cfg.adminToken.length >= 16 && (await redeemInvite(ctx, code));
+  if (!ok) return new Response(JSON.stringify({ ok: false, error: "invalid_or_used_code" }), { status: 401, headers: JSONH });
+  const exp = ctx.now() + SESSION_MS;
+  return new Response(JSON.stringify({ ok: true, expires_at: new Date(exp).toISOString() }), {
+    status: 200, headers: { ...JSONH, "Set-Cookie": sessionCookie(sessionValue(ctx.cfg.adminToken!, exp), Math.floor(SESSION_MS / 1000)) },
+  });
+}
+
+export function staffLogout(): Response {
+  return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { ...JSONH, "Set-Cookie": sessionCookie("", 0) } });
+}
+
+/** GET /api/staff/session: is this browser signed in (cookie) or holding the owner token? */
+export function staffSession(ctx: Ctx, req: Request): Response {
+  const exp = sessionOf(req, ctx.cfg.adminToken, ctx.now());
+  const owner = ownerAuthorized(ctx, req);
+  return new Response(JSON.stringify({ ok: exp !== null || owner, via: owner ? "owner_token" : exp !== null ? "staff_session" : null, expires_at: exp ? new Date(exp).toISOString() : null }), { status: exp !== null || owner ? 200 : 401, headers: JSONH });
+}
+
+/** POST /api/admin/start-conversation (Bearer ADMIN_TOKEN): owner-run bot-started messages through the SAME guarded function as the MCP tool. */
+export async function adminStartConversation(ctx: Ctx, req: Request): Promise<Response> {
+  if (!ownerAuthorized(ctx, req)) return unauthorized();
+  let b: Record<string, unknown>;
+  try { b = (await req.json()) as Record<string, unknown>; } catch { return bad(); }
+  const s = (k: string, max: number) => (typeof b[k] === "string" && (b[k] as string).length <= max ? (b[k] as string) : undefined);
+  const tp = Array.isArray(b.template_params) && b.template_params.length <= 20 && b.template_params.every((x) => typeof x === "string" && x.length <= 1000) ? (b.template_params as string[]) : undefined;
+  const r = await startConversation(ctx, {
+    conversation_id: s("conversation_id", 24), to: s("to", 24), text: s("text", 4000), template_name: s("template_name", 100),
+    template_language: s("template_language", 20), template_params: tp, idempotency_key: s("idempotency_key", 100),
+  });
+  ctx.log("admin", { action: "start_conversation", ok: r.ok === true, err: r.ok === true ? undefined : String(r.error ?? "") });
+  return Response.json(r);
 }
 
 const unauthorized = () =>
@@ -18,6 +69,12 @@ const unauthorized = () =>
     status: 401,
     headers: { "Content-Type": "application/json", "WWW-Authenticate": 'Bearer realm="admin"' },
   });
+
+/** Short preview of the newest message for the inbox list (staff are authorised to see the conversation). */
+function lastMessage(c: Conv): Json | null {
+  const m = c.messages[c.messages.length - 1];
+  return m ? { from: m.dir === "in" ? "customer" : "business", at: iso(m.ts), type: m.type, preview: m.text.slice(0, 120) } : null;
+}
 
 function summary(c: Conv, now: number): Json {
   const outs = Object.values(c.outs).sort((a, b) => b.createdAt - a.createdAt);
@@ -37,6 +94,9 @@ function summary(c: Conv, now: number): Json {
     last_reply_status: outs[0]?.status ?? null,
     escalation_reason: c.escalation?.reason ?? null,
     hold_reason: c.hold?.reason ?? null,
+    opted_out: !!c.optOut,
+    needs_human: c.state === "escalated" || c.state === "held_for_review" || (c.state === "human_takeover" && c.unhandled > 0),
+    last_message: lastMessage(c),
     updated_at: iso(c.updatedAt),
   };
 }
@@ -52,7 +112,7 @@ export async function adminGet(ctx: Ctx, req: Request): Promise<Response> {
     // The lease is a credential for the MCP tools; never expose it.
     c.lease = undefined;
     c.messages = c.messages.slice(-50);
-    return Response.json(c);
+    return Response.json({ ...c, opted_out: !!c.optOut, window_open: windowOpen(c, now) });
   }
   const { snap, items } = await readAll<Conv>(ctx.store, "conv/", [CONTROLS_KEY, REJECTIONS_KEY]); // whole overview = 1 read
   const controls = controlsOf(snap);
@@ -61,7 +121,7 @@ export async function adminGet(ctx: Ctx, req: Request): Promise<Response> {
     .map((r) => summary(normalize(structuredClone(r.value), now), now))
     .sort((a, b) => String(b.last_inbound_at ?? "").localeCompare(String(a.last_inbound_at ?? "")));
   return Response.json({
-    controls: { auto_reply: controls.autoReply, launch_mode: ctx.cfg.launchMode },
+    controls: { auto_reply: controls.autoReply, launch_mode: ctx.cfg.launchMode, template_allowlist: ctx.cfg.templateAllowlist },
     rejections: { count: (rej?.value.count ?? 0) + ctx.state.rejPending, last: iso(rej?.value.last) },
     conversations,
   });
@@ -102,7 +162,7 @@ export async function adminErase(ctx: Ctx, req: Request, id: string): Promise<Re
 
 export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
   if (!adminAuthorized(ctx, req)) return unauthorized();
-  let body: { action?: string; value?: string; conversation_id?: string };
+  let body: { action?: string; value?: string; conversation_id?: string; text?: string; template_name?: string; template_language?: string; idempotency_key?: string; ttl_minutes?: number };
   try {
     body = await req.json();
   } catch {
@@ -116,12 +176,23 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
     const kicked = body.value === "active" ? await kickPendingWakes(ctx) : 0;
     return Response.json({ ok: true, auto_reply: body.value, woken: kicked });
   }
+  if (action === "staff_invite") {
+    if (!ownerAuthorized(ctx, req)) return unauthorized(); // a staff session can never mint more sessions
+    const inv = await createInvite(ctx, typeof body.ttl_minutes === "number" ? body.ttl_minutes : 15);
+    return Response.json({ ok: true, ...inv, sign_in_at: new URL("/admin", req.url).toString(), note: "One-time code: valid once, until expires_at. It is not the admin token." });
+  }
   const id = body?.conversation_id;
   if (typeof id !== "string" || !CONV_ID_RE.test(id)) return bad();
-  const known = ["takeover", "release", "release_hold", "reopen", "resolve", "wake", "delete_conversation"];
+  const known = ["takeover", "release", "release_hold", "reopen", "resolve", "wake", "delete_conversation", "reply", "opt_out", "opt_in"];
   if (!action || !known.includes(action)) return bad();
 
   if (action === "delete_conversation") return eraseConversation(ctx, id);
+  if (action === "reply") {
+    const str = (v: unknown, max: number) => (typeof v === "string" && v.length <= max ? v : undefined);
+    const r = await staffReply(ctx, { conversation_id: id, text: str(body.text, 4000), template_name: str(body.template_name, 100), template_language: str(body.template_language, 20), idempotency_key: str(body.idempotency_key, 100) });
+    ctx.log("admin", { action, conv: id, ok: r.ok === true });
+    return Response.json(r, { status: r.error === "not_found" ? 404 : 200 });
+  }
 
   let fire: Armed | null = null;
   const r = await update<Conv, Json>(ctx, convKeyOf(id), (c) => {
@@ -130,6 +201,13 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
     normalize(c, now);
     c.updatedAt = now;
     switch (action) {
+      case "opt_out":
+        c.optOut = { at: now, via: "staff" };
+        return { next: c, result: { ok: true, opted_out: true } };
+      case "opt_in":
+        if (!c.optOut) return { next: undefined, result: { ok: true, opted_out: false } };
+        c.optOut = undefined;
+        return { next: c, result: { ok: true, opted_out: false } };
       case "takeover":
         c.prevState = c.state === "human_takeover" ? c.prevState : c.state;
         c.state = "human_takeover";
