@@ -65,7 +65,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-اسکریپت با `wrangler login --device` شما را وارد می‌کند (کدی را در مرورگر تأیید می‌کنید؛ هرگز حساب نمی‌سازد)، استقرار را انجام می‌دهد، توکن‌های خود پل را می‌سازد و رازها را از طریق stdin بارگذاری می‌کند. مسیرهای دیگر (Cloudflare API بدون ورود، رازهای خودتأمین) در [docs/DEPLOY.md](../DEPLOY.md) آمده است. مسیر `wrangler` فقط به‌صورت اجرای آزمایشی (dry run) اجرا شده است؛ مسیر API به‌صورت زنده اجرا شده است ([وضعیت](../STATUS.md)).
+اسکریپت با `wrangler login --device` شما را وارد می‌کند (کدی را در مرورگر تأیید می‌کنید؛ هرگز حساب نمی‌سازد)، استقرار را انجام می‌دهد، توکن‌های خود پل را می‌سازد و رازها را از طریق stdin بارگذاری می‌کند. مسیرهای دیگر (Cloudflare API بدون ورود، رازهای خودتأمین) در [docs/DEPLOY.md](../DEPLOY.md) آمده است. این راه‌اندازی به‌صورت زنده روی ۲ حساب مختلف اثبات شده است ([وضعیت](../STATUS.md)).
 
 ### 3. اتصال Meta و عامل خودتان
 

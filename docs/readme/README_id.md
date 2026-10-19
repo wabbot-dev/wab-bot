@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-Skrip ini memasukkan Anda dengan `wrangler login --device` (Anda menyetujui kode di browser; skrip tidak pernah membuat akun), men-deploy, membuat token milik jembatan itu sendiri, dan mengunggah rahasia lewat stdin. Jalur lain (Cloudflare API tanpa login, rahasia yang disediakan sendiri) ada di [docs/DEPLOY.md](../DEPLOY.md). Jalur `wrangler` baru dijalankan sebagai uji coba (dry run); jalur API dijalankan secara langsung ([status](../STATUS.md)).
+Skrip ini memasukkan Anda dengan `wrangler login --device` (Anda menyetujui kode di browser; skrip tidak pernah membuat akun), men-deploy, membuat token milik jembatan itu sendiri, dan mengunggah rahasia lewat stdin. Jalur lain (Cloudflare API tanpa login, rahasia yang disediakan sendiri) ada di [docs/DEPLOY.md](../DEPLOY.md). Penyiapan ini telah terbukti berjalan langsung di 2 akun berbeda ([status](../STATUS.md)).
 
 ### 3. Hubungkan Meta dan agen Anda
 

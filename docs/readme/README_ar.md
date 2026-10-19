@@ -65,7 +65,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-يسجّل السكربت دخولك باستخدام `wrangler login --device` (توافق على رمز في متصفحك؛ ولا ينشئ حسابًا أبدًا)، ثم ينشر، ويولّد رموز الجسر الخاصة، ويرفع الأسرار عبر stdin. توجد مسارات أخرى (واجهة Cloudflare API دون تسجيل دخول، أسرار يوفّرها النظام ذاتيًا) في [docs/DEPLOY.md](../DEPLOY.md). مسار `wrangler` لم يُشغَّل إلا كتشغيل تجريبي (dry run)؛ أما مسار الواجهة البرمجية فقد شُغِّل فعليًا ([الحالة](../STATUS.md)).
+يسجّل السكربت دخولك باستخدام `wrangler login --device` (توافق على رمز في متصفحك؛ ولا ينشئ حسابًا أبدًا)، ثم ينشر، ويولّد رموز الجسر الخاصة، ويرفع الأسرار عبر stdin. توجد مسارات أخرى (واجهة Cloudflare API دون تسجيل دخول، أسرار يوفّرها النظام ذاتيًا) في [docs/DEPLOY.md](../DEPLOY.md). تم إثبات عمل الإعداد فعليًا على حسابين مختلفين ([الحالة](../STATUS.md)).
 
 ### 3. اربط Meta ووكيلك
 

@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-スクリプトは `wrangler login --device` でログインし（ブラウザでコードを承認します。アカウントは作成しません）、デプロイし、ブリッジ独自のトークンを生成し、stdin 経由でシークレットをアップロードします。ほかの方法（ログインなしの Cloudflare API、自己プロビジョニングのシークレット）は [docs/DEPLOY.md](../DEPLOY.md) にあります。`wrangler` 経由はドライランとしてのみ実行されており、API 経由は実際に実行されています（[ステータス](../STATUS.md)）。
+スクリプトは `wrangler login --device` でログインし（ブラウザでコードを承認します。アカウントは作成しません）、デプロイし、ブリッジ独自のトークンを生成し、stdin 経由でシークレットをアップロードします。ほかの方法（ログインなしの Cloudflare API、自己プロビジョニングのシークレット）は [docs/DEPLOY.md](../DEPLOY.md) にあります。セットアップは 2 つの異なるアカウントで実際に動作することが確認されています（[ステータス](../STATUS.md)）。
 
 ### 3. Meta とエージェントを接続する
 

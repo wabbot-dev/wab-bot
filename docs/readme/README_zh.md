@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-该脚本通过 `wrangler login --device` 为你登录（你在浏览器中批准一个代码；它从不创建账号），然后部署、生成桥接服务自己的令牌，并通过 stdin 上传密钥。其他方式（无需登录的 Cloudflare API、自行配置密钥）见 [docs/DEPLOY.md](../DEPLOY.md)。`wrangler` 方式只以演练模式运行过；API 方式曾实际运行过（[状态](../STATUS.md)）。
+该脚本通过 `wrangler login --device` 为你登录（你在浏览器中批准一个代码；它从不创建账号），然后部署、生成桥接服务自己的令牌，并通过 stdin 上传密钥。其他方式（无需登录的 Cloudflare API、自行配置密钥）见 [docs/DEPLOY.md](../DEPLOY.md)。该设置已在 2 个不同账号上实际验证过（[状态](../STATUS.md)）。
 
 ### 3. 连接 Meta 和你的智能体
 

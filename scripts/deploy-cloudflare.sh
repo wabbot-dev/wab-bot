@@ -35,6 +35,14 @@ while [ $# -gt 0 ]; do
 done
 
 say() { printf '%s\n' "$*"; }
+# Names (never values) of required secrets that were skipped or failed to upload. Any entry makes the script exit non-zero.
+NOT_SET=()
+not_set() { NOT_SET+=("$1"); }
+fail_if_not_set() { # context
+  [ "${#NOT_SET[@]}" -eq 0 ] && return 0
+  printf 'ERROR: %s, but these required secrets were NOT set: %s\n' "$1" "${NOT_SET[*]}" >&2
+  return 1
+}
 die() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 WR() { WRANGLER_SEND_METRICS="${WRANGLER_SEND_METRICS:-false}" npx --no-install wrangler "$@"; }
 
@@ -75,20 +83,24 @@ fi
 # Put one secret: value on STDIN only, never in argv, never echoed.
 put_secret() { # name value
   [[ "$ALLOWED" == *" $1 "* ]] || die "unknown secret name: $1"
-  printf '%s' "$2" | WR secret put "$1" "${NAME_ARGS[@]}" >/dev/null
-  say "  set $1"
+  if printf '%s' "$2" | WR secret put "$1" "${NAME_ARGS[@]}" >/dev/null; then
+    say "  set $1"
+  else
+    say "  FAILED to set $1 (retry with: bash scripts/deploy-cloudflare.sh --set-secret $1)"
+    not_set "$1"
+  fi
 }
 
 # Hidden prompt (value stays in this shell only). Uses the exported variable of the same name when present.
 ask_secret() { # name label
   local n="$1" v="${!1:-}"
   if [ -z "$v" ]; then
-    [ -t 0 ] || { say "  skipped $n (no terminal; export $n or run: bash scripts/deploy-cloudflare.sh --set-secret $n)"; return 0; }
+    [ -t 0 ] || { say "  skipped $n (no terminal; export $n or run: bash scripts/deploy-cloudflare.sh --set-secret $n)"; not_set "$n"; return 0; }
     printf '%s (input hidden, empty = skip): ' "$2" >&2
     IFS= read -rs v || true
     printf '\n' >&2
   fi
-  [ -n "$v" ] || { say "  skipped $n (set it later with: bash scripts/deploy-cloudflare.sh --set-secret $n)"; return 0; }
+  [ -n "$v" ] || { say "  skipped $n (set it later with: bash scripts/deploy-cloudflare.sh --set-secret $n)"; not_set "$n"; return 0; }
   put_secret "$n" "$v"
   v=""
 }
@@ -110,10 +122,11 @@ if [ "$SELF" = 1 ]; then
       if [ -t 0 ]; then
         printf '%s (input hidden, empty = skip, add later with scripts/cf-api-deploy.mjs rotate): ' "$n" >&2
         IFS= read -rs v || true; printf '\n' >&2
-        [ -z "$v" ] || printf '%s=%s\n' "$n" "$v" >> "$F"
+        if [ -n "$v" ]; then printf '%s=%s\n' "$n" "$v" >> "$F"; else say "  skipped $n (add it later with scripts/cf-api-deploy.mjs rotate)"; not_set "$n"; fi
         v=""
       else
         say "  no $n in the environment and no terminal: skipped (add it later with scripts/cf-api-deploy.mjs rotate)"
+        not_set "$n"
       fi
     fi
   done
@@ -125,6 +138,10 @@ if [ "$SELF" = 1 ]; then
   [ -n "$URL" ] || die "could not find the workers.dev URL in the wrangler output"
   sleep 3
   node scripts/cf-api-deploy.mjs provision --url "$URL" --secrets-file "$F"
+  if ! fail_if_not_set "Setup was provisioned and is now locked"; then
+    printf '  Add them with: node scripts/cf-api-deploy.mjs rotate --url %s --admin-token-file %s --secrets-file <file with the missing KEY=VALUE lines>\n' "$URL" "$F" >&2
+    exit 1
+  fi
   say "Done. Setup is locked. Webhook callback URL: $URL/api/webhook"
   say "  Your values stay in $F (mode 0600, git-ignored). Later changes: node scripts/cf-api-deploy.mjs rotate --url $URL --admin-token-file $F --secrets-file <file with the new KEY=VALUE lines>"
   exit 0
@@ -133,6 +150,7 @@ fi
 if [ -n "$ONLY" ]; then
   login_if_needed
   ask_secret "$ONLY" "$ONLY"
+  fail_if_not_set "--set-secret did not complete" || exit 1
   exit 0
 fi
 
@@ -160,6 +178,11 @@ if [ "$NOSECRETS" = 0 ]; then
   v=""
   say "Meta values (never leave this machine except to Cloudflare):"
   for n in "${META_SECRETS[@]}"; do ask_secret "$n" "$n"; done
+fi
+
+if ! fail_if_not_set "The Worker was deployed${URL:+ to $URL}"; then
+  printf '  Set each one with: bash scripts/deploy-cloudflare.sh --name %s --set-secret <NAME>   (until then the matching endpoints fail closed)\n' "$NAME" >&2
+  exit 1
 fi
 
 say

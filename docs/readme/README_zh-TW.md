@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-該腳本透過 `wrangler login --device` 為你登入（你在瀏覽器中批准一個代碼；它從不建立帳號），然後部署、產生橋接服務自己的權杖，並透過 stdin 上傳密鑰。其他方式（不需登入的 Cloudflare API、自行配置密鑰）請見 [docs/DEPLOY.md](../DEPLOY.md)。`wrangler` 方式只以演練模式運行過；API 方式曾實際運行過（[狀態](../STATUS.md)）。
+該腳本透過 `wrangler login --device` 為你登入（你在瀏覽器中批准一個代碼；它從不建立帳號），然後部署、產生橋接服務自己的權杖，並透過 stdin 上傳密鑰。其他方式（不需登入的 Cloudflare API、自行配置密鑰）請見 [docs/DEPLOY.md](../DEPLOY.md)。此設定已在 2 個不同帳號上實際驗證過（[狀態](../STATUS.md)）。
 
 ### 3. 連接 Meta 和你的代理
 

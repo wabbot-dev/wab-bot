@@ -24,7 +24,7 @@ When a deploy route cannot carry secret values (some tool integrations redact th
 
 ## After the deploy
 
-1. `bash scripts/smoke.sh https://<worker>.<your-subdomain>.workers.dev` (unauthenticated checks; sends no secret).
+1. `bash scripts/smoke.sh https://<worker>.<your-subdomain>.workers.dev` (unauthenticated checks; sends no secret; each check is retried with backoff for up to about 3 minutes in total, set by `SMOKE_RETRY_SECONDS`, so a brand-new route does not fail falsely).
 2. Finish the Meta side: [META-CHECKLIST.md](META-CHECKLIST.md), tooling in [META-SETUP.md](META-SETUP.md).
 3. Connect your agent: [WAKE-ROUTINE.md](WAKE-ROUTINE.md).
 4. Stay in test mode until a message round-trips: `LAUNCH_MODE=test`, auto-reply paused, `TEST_RECIPIENTS` set. Only then set `LAUNCH_MODE=live` and activate auto-reply in `/admin`.

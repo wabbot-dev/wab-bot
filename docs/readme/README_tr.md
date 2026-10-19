@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-Betik, `wrangler login --device` ile oturum açar (tarayıcınızda bir kodu onaylarsınız; hiçbir zaman hesap oluşturmaz), dağıtımı yapar, köprünün kendi belirteçlerini üretir ve gizli bilgileri stdin üzerinden yükler. Diğer yollar (oturum açmadan Cloudflare API, kendi kendine sağlanan gizli bilgiler) [docs/DEPLOY.md](../DEPLOY.md) içindedir. `wrangler` yolu yalnızca deneme çalıştırması (dry run) olarak çalıştırıldı; API yolu canlı çalıştırıldı ([durum](../STATUS.md)).
+Betik, `wrangler login --device` ile oturum açar (tarayıcınızda bir kodu onaylarsınız; hiçbir zaman hesap oluşturmaz), dağıtımı yapar, köprünün kendi belirteçlerini üretir ve gizli bilgileri stdin üzerinden yükler. Diğer yollar (oturum açmadan Cloudflare API, kendi kendine sağlanan gizli bilgiler) [docs/DEPLOY.md](../DEPLOY.md) içindedir. Kurulum 2 farklı hesapta canlı olarak kanıtlandı ([durum](../STATUS.md)).
 
 ### 3. Meta'yı ve ajanınızı bağlayın
 

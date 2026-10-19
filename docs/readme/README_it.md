@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-Lo script ti fa accedere con `wrangler login --device` (approvi un codice nel browser; non crea mai un account), distribuisce, genera i token propri del bridge e carica i segreti tramite stdin. Le altre vie (API di Cloudflare senza login, segreti autoprovisionati) sono in [docs/DEPLOY.md](../DEPLOY.md). La via `wrangler` è stata eseguita solo come prova a secco (dry run); la via API è stata eseguita dal vivo ([stato](../STATUS.md)).
+Lo script ti fa accedere con `wrangler login --device` (approvi un codice nel browser; non crea mai un account), distribuisce, genera i token propri del bridge e carica i segreti tramite stdin. Le altre vie (API di Cloudflare senza login, segreti autoprovisionati) sono in [docs/DEPLOY.md](../DEPLOY.md). La configurazione è stata verificata dal vivo su 2 account diversi ([stato](../STATUS.md)).
 
 ### 3. Collega Meta e il tuo agente
 

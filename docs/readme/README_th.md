@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-สคริปต์จะล็อกอินให้คุณด้วย `wrangler login --device` (คุณอนุมัติรหัสในเบราว์เซอร์ สคริปต์ไม่เคยสร้างบัญชี) แล้วปรับใช้ สร้างโทเค็นของบริดจ์เอง และอัปโหลดความลับผ่าน stdin เส้นทางอื่น (Cloudflare API โดยไม่ต้องล็อกอิน, ความลับที่จัดสรรเอง) อยู่ใน [docs/DEPLOY.md](../DEPLOY.md) เส้นทาง `wrangler` เคยรันเป็น dry run เท่านั้น ส่วนเส้นทาง API เคยรันจริง ([สถานะ](../STATUS.md))
+สคริปต์จะล็อกอินให้คุณด้วย `wrangler login --device` (คุณอนุมัติรหัสในเบราว์เซอร์ สคริปต์ไม่เคยสร้างบัญชี) แล้วปรับใช้ สร้างโทเค็นของบริดจ์เอง และอัปโหลดความลับผ่าน stdin เส้นทางอื่น (Cloudflare API โดยไม่ต้องล็อกอิน, ความลับที่จัดสรรเอง) อยู่ใน [docs/DEPLOY.md](../DEPLOY.md) การตั้งค่านี้ได้รับการพิสูจน์แล้วว่าใช้งานได้จริงบน 2 บัญชีที่แตกต่างกัน ([สถานะ](../STATUS.md))
 
 ### 3. เชื่อมต่อ Meta และเอเจนต์ของคุณ
 

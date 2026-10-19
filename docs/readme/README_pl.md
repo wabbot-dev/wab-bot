@@ -59,7 +59,7 @@ bash scripts/deploy-cloudflare.sh --dry-run                  # prints the plan, 
 bash scripts/deploy-cloudflare.sh --name my-business-wa      # lowercase letters, digits, dashes
 ```
 
-Skrypt loguje Cię poleceniem `wrangler login --device` (zatwierdzasz kod w przeglądarce; nigdy nie tworzy konta), wdraża, generuje własne tokeny mostu i przesyła sekrety przez stdin. Inne ścieżki (Cloudflare API bez logowania, samodzielnie przygotowane sekrety) opisano w [docs/DEPLOY.md](../DEPLOY.md). Ścieżkę `wrangler` uruchomiono tylko jako próbny przebieg (dry run); ścieżkę API uruchomiono na żywo ([status](../STATUS.md)).
+Skrypt loguje Cię poleceniem `wrangler login --device` (zatwierdzasz kod w przeglądarce; nigdy nie tworzy konta), wdraża, generuje własne tokeny mostu i przesyła sekrety przez stdin. Inne ścieżki (Cloudflare API bez logowania, samodzielnie przygotowane sekrety) opisano w [docs/DEPLOY.md](../DEPLOY.md). Konfigurację sprawdzono na żywo na 2 różnych kontach ([status](../STATUS.md)).
 
 ### 3. Połącz Meta i swojego agenta
 
