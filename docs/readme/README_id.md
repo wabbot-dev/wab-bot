@@ -122,7 +122,7 @@ Selama `LAUNCH_MODE=test` atau balasan otomatis dijeda, `send_reply` menjawab `b
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (407 if unknown or already erased)
+# {"ok":true,"deleted":true}   (404 if unknown or already erased)
 ```
 
 **Menghapus semuanya:** `bash scripts/teardown-cloudflare.sh` (meminta Anda mengetik nama Worker; menghapus Worker dan semua percakapan yang tersimpan, tidak ada yang lain).

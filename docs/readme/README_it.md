@@ -122,7 +122,7 @@ Finché `LAUNCH_MODE=test` è attivo o la risposta automatica è in pausa, `send
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (407 if unknown or already erased)
+# {"ok":true,"deleted":true}   (404 if unknown or already erased)
 ```
 
 **Rimuovere tutto:** `bash scripts/teardown-cloudflare.sh` (ti chiede di digitare il nome del Worker; elimina il Worker e ogni conversazione memorizzata, nient'altro).

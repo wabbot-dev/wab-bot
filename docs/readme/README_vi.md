@@ -122,7 +122,7 @@ Khi `LAUNCH_MODE=test` hoặc tự động trả lời đang tạm dừng, `send
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (407 if unknown or already erased)
+# {"ok":true,"deleted":true}   (404 if unknown or already erased)
 ```
 
 **Gỡ bỏ mọi thứ:** `bash scripts/teardown-cloudflare.sh` (yêu cầu bạn gõ tên Worker; xóa Worker và mọi cuộc trò chuyện đã lưu, không xóa gì khác).

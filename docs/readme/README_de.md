@@ -122,7 +122,7 @@ Solange `LAUNCH_MODE=test` gilt oder die Auto-Antwort pausiert ist, antwortet `s
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (407 if unknown or already erased)
+# {"ok":true,"deleted":true}   (404 if unknown or already erased)
 ```
 
 **Alles entfernen:** `bash scripts/teardown-cloudflare.sh` (verlangt, dass Sie den Worker-Namen eintippen; löscht den Worker und jede gespeicherte Unterhaltung, sonst nichts).

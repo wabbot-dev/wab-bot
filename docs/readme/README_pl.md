@@ -122,7 +122,7 @@ Gdy `LAUNCH_MODE=test` lub automatyczna odpowiedź jest wstrzymana, `send_reply`
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (407 if unknown or already erased)
+# {"ok":true,"deleted":true}   (404 if unknown or already erased)
 ```
 
 **Usunięcie wszystkiego:** `bash scripts/teardown-cloudflare.sh` (prosi o wpisanie nazwy Workera; usuwa Workera i wszystkie zapisane rozmowy, nic więcej).
