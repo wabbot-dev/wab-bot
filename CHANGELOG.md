@@ -4,6 +4,16 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-21 (preview)
+
+One bot per Meta app by default: a second bot gets its own Meta app in the same business portfolio instead of sharing one with another bot.
+
+### Changed
+- **One bot per Meta app by default** ([docs/META-SETUP.md](docs/META-SETUP.md#one-bot-per-meta-app-a-second-bot-gets-a-new-meta-app)): when the Meta app you point a new bot at already serves another bot (its app-level callback points to another deployment), setup changes nothing. The Worker setup route (`POST /api/admin/meta-setup`) stops at an `app_in_use` step, skips every later step and returns `new_app_required` (the other bot's host, the steps to create a new Meta app in the same business portfolio, and how to override); `scripts/meta-setup.mjs` checks this before subscribing, prints a "NEW META APP REQUIRED" banner, sends no Graph changes, skips the secrets write and push, and exits 1. A free app is set up as before with the app-level callback.
+- The per-number webhook override for a second bot on a shared app is now an explicit opt-in only: `webhook_scope: "phone"` on the setup route or `--phone-override` on `scripts/meta-setup.mjs`. `replace_webhook` / `--replace-webhook` still replaces another deployment's callback on purpose.
+- Meta fake (dry run): `DRYRUN_USER_TOKEN_APP_IN_USE` simulates an app that already serves another bot, so `META_SETUP_DRY_RUN=1` exercises the `new_app_required` path.
+- Docs: META-SETUP, DEPLOY, BUSINESS-MODE, META-CHECKLIST, TROUBLESHOOTING and the README in all languages describe the one-bot-per-app default.
+
 ## [0.4.0] - 2026-10-20 (preview)
 
 Template-ready bridge: one generic template for consumer bots, business (trade) bots or both, and safe to run a second bot next to an existing one. Adds business mode with an owner-managed directory, staff-verified payments, a bookings/orders hook, instant alerts, rich replies, inbound documents, locations and contact cards, Arabic and other-language voice replies through xAI or ElevenLabs, and per-number webhook routing. Breaking: `WA_PHONE_NUMBER_IDS` is now required (see Changed).

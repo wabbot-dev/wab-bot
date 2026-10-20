@@ -1,6 +1,6 @@
 # Documentation index
 
-**Status: preview v0.4.0.** Read [STATUS.md](STATUS.md) first: it says what is verified, how, and what is not.
+**Status: preview v0.4.1.** Read [STATUS.md](STATUS.md) first: it says what is verified, how, and what is not.
 
 | I want to... | Read |
 |---|---|

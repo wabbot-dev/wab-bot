@@ -248,7 +248,7 @@ test("get_version, get_usage_summary", async () => {
   const r = rig();
   await seed(r.h);
   const v = await r.tool("get_version");
-  assert.equal(v.version, "0.4.0");
+  assert.equal(v.version, "0.4.1");
   assert.ok(v.tools.includes("check_for_update") && v.mcp_protocol_versions.includes("2025-06-18"));
   const u = await r.tool("get_usage_summary");
   assert.equal(u.messages.conversations, 1);
@@ -267,7 +267,7 @@ test("check_for_update only reports: newer, current, no release, failure; one fi
     if (mode === "throw") throw new Error("offline");
     if (mode === "none") return new Response("{}", { status: 404 });
     if (mode === "fail") return new Response("{}", { status: 500 });
-    return Response.json({ tag_name: mode === "newer" ? "v0.5.0" : "v0.4.0", html_url: "https://github.com/wabbot-dev/wab-bot/releases/tag/x", published_at: "2026-10-20T00:00:00Z" });
+    return Response.json({ tag_name: mode === "newer" ? "v0.5.0" : "v0.4.1", html_url: "https://github.com/wabbot-dev/wab-bot/releases/tag/x", published_at: "2026-10-20T00:00:00Z" });
   };
   const a = await r.tool("check_for_update");
   assert.deepEqual([a.ok, a.update_available, a.latest, a.auto_update], [true, true, "v0.5.0", false]);
