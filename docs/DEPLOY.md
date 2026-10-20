@@ -9,7 +9,7 @@ Prerequisites: Node.js 20+ (22 recommended, see `.nvmrc`), `openssl` for the wra
 ```bash
 npm ci
 bash scripts/deploy-cloudflare.sh --dry-run                       # prints the plan, makes no call
-bash scripts/deploy-cloudflare.sh --name my-business-wa           # lowercase letters, digits, dashes
+bash scripts/deploy-cloudflare.sh --slug acme                    # Worker name wab-bot-acme (one Worker per bot)
 ```
 
 The script (read it first) checks Node, logs you in with `wrangler login --device` if needed (a URL and code you approve in any browser; it never sees your password and never creates an account), deploys, generates `MCP_TOKEN`, `ADMIN_TOKEN`, `CRON_SECRET` and `WA_VERIFY_TOKEN` with `openssl`, saves them to a mode-0600 file under `.deploy/` (git-ignored) and uploads them with `wrangler secret put` (value on **stdin**: never in argv, never echoed, never in `wrangler.toml`). It then asks, at hidden prompts, for `WA_APP_SECRET` and `WA_ACCESS_TOKEN` (or reads them if exported; empty = skip, add later with `--set-secret NAME`). If either was skipped, the script ends with a warning that names the skipped secrets and exits with code 3, because the Worker cannot verify Meta's webhooks or send replies without them. `--allow-missing-secrets` accepts that for a test setup (same warning, exit 0). `--no-secrets` sets nothing by your own choice and is not reported.
@@ -28,9 +28,28 @@ Create a custom token for **your one account** with **Account, Workers Scripts, 
 
 When a deploy route cannot carry secret values (some tool integrations redact them), the Worker can receive its secrets itself, once: see [SELF-PROVISIONING.md](SELF-PROVISIONING.md).
 
+## One Worker per bot (a second bot in the same account)
+
+Every bot gets its own Worker, named `wab-bot-<business>` (`--slug <business>`, or any name with `--name`). Each Worker has its own
+Durable Object (conversations), tokens, numbers (`WA_PHONE_NUMBER_IDS`) and webhook route, so a consumer bot and a business bot of the
+same company never share state. Before deploying, both scripts check whether a Worker of that name already exists in the account:
+
+- `deploy-cloudflare.sh`: if it exists and this folder did not create it (no `.deploy/<name>.secrets.env`, `.setup.env` or `.owner`
+  file), it **refuses** and deploys nothing. `--update` deploys over it on purpose (only when that Worker is this bot). After a deploy it
+  writes `.deploy/<name>.owner` (no secrets in it). The check uses the Cloudflare API with `CLOUDFLARE_API_TOKEN` and
+  `CLOUDFLARE_ACCOUNT_ID` (`node scripts/cf-api-deploy.mjs check-name --name <name>`: exit 0 free, 3 taken), or `wrangler deployments list`.
+- `cf-api-deploy.mjs deploy`: refuses to upload over an existing Worker of that name unless `--update`.
+
+Then route only this bot's number to it: see [META-SETUP.md](META-SETUP.md#a-second-bot-on-the-same-meta-app-never-overwrite-the-first-bots-webhook).
+
+**Shared Workers AI allowance.** The free 10,000 Neurons per day (voice notes, images, documents, voice replies) belong to the **Cloudflare
+account**, not to a Worker. Two bots in one account share them: when one bot uses them up (error 3036, until 00:00 UTC) the other falls back
+to plain markers too. Each bot's `get_overview` shows only its own estimate; add them up, or use separate Cloudflare accounts for bots that
+need the full allowance each ([MEDIA.md](MEDIA.md#cost-the-free-daily-allowance)).
+
 ## Existing accounts
 
-The Cloudflare account may already have Workers: list them before you deploy (`npx wrangler whoami`, the dashboard, or `GET /accounts/{id}/workers/scripts`), choose a Worker name that is not in the list (an existing name is replaced), and never touch a Worker you did not create. The account owner signs in and does any 2FA personally. Use the owner's own plain email address: Cloudflare refused a plus-tag alias in the dry run, and a Facebook sign-up with one did not go through either. Full text: [CLOUDFLARE.md](CLOUDFLARE.md#existing-accounts).
+The Cloudflare account may already have Workers: list them before you deploy (`npx wrangler whoami`, the dashboard, or `GET /accounts/{id}/workers/scripts`), choose a Worker name that is not in the list (the scripts refuse an existing name unless `--update`), and never touch a Worker you did not create. The account owner signs in and does any 2FA personally. Use the owner's own plain email address: Cloudflare refused a plus-tag alias in the dry run, and a Facebook sign-up with one did not go through either. Full text: [CLOUDFLARE.md](CLOUDFLARE.md#existing-accounts).
 
 ## After the deploy
 

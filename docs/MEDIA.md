@@ -50,6 +50,8 @@ The two share one allowance: for example 100 one-minute voice notes and 100 imag
 `media.estimated_neurons_today` (from the published rates and the measured audio seconds and tokens; the authoritative figure is the Workers AI
 dashboard) next to `media.free_neurons_per_day`. Rates are Cloudflare's and can change: check the pricing page.
 
+The allowance belongs to the Cloudflare **account**: several bots (Workers) in one account share it ([DEPLOY.md](DEPLOY.md#one-worker-per-bot-a-second-bot-in-the-same-account)).
+
 The bridge itself never changes a plan or enables billing. If you are on Workers Paid, usage past the allowance **is** billed by Cloudflare; turn
 the features off (below) if you do not want that.
 

@@ -14,6 +14,8 @@
 //   node scripts/cf-api-deploy.mjs subdomain --name NAME [--subdomain SUB]                              (only make sure the account has a workers.dev subdomain)
 //   node scripts/cf-api-deploy.mjs verify    --url https://NAME.SUB.workers.dev --secrets-file F [--phone ID]
 //   node scripts/cf-api-deploy.mjs teardown  --name NAME [--emit-plugin-js OUT.js]
+//   node scripts/cf-api-deploy.mjs check-name --name NAME                                               (exit 0 free, 3 a Worker of that name exists)
+// deploy refuses to upload over an existing Worker of the same name (it may be another bot) unless --update is given.
 //
 // workers.dev subdomain: a brand-new Cloudflare account has none, so `deploy` first does GET /accounts/{id}/workers/subdomain and, only if
 //   none is registered, PUT /accounts/{id}/workers/subdomain with "<worker name>-<6 random hex>" (new suffix on a name clash, a few tries) or
@@ -59,7 +61,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith("--")) { o._.push(a); continue; }
     const k = a.slice(2);
-    if (k === "self-provision" || k === "from-env" || k === "no-nonce" || k === "purge-secret-bindings") { o[k] = "1"; continue; }
+    if (k === "self-provision" || k === "from-env" || k === "no-nonce" || k === "purge-secret-bindings" || k === "update") { o[k] = "1"; continue; }
     const v = argv[++i];
     if (v === undefined) die(`--${k} needs a value`);
     if (k === "var") o.var.push(v);
@@ -115,6 +117,8 @@ const DEPLOY = `async (cloudflare, accountId, input) => {
   if (!sdr.ok) return { ok: false, step: 'subdomain', error: sdr.error };
   const before = await cloudflare.request({ method: 'GET', path: base + '/scripts' });
   const exists = (before.result || []).some((s) => s.id === input.name);
+  // one Worker per bot: never upload over an existing Worker (maybe another bot) unless the caller says it is this bot (--update)
+  if (exists && !input.update) return { ok: false, step: 'name_check', error: 'a Worker named ' + input.name + ' already exists in this account (maybe another bot); nothing was uploaded. Pick a unique name (wab-bot-<business>) or pass --update if it is this bot' };
   const metadata = { ...input.metadata };
   // v1 = the state object; v2 = the per-call object (voice calling). A new script gets both at once. An existing script gets the
   // missing step: input.migrateFrom is the tag it already has ('v1' for deployments made before voice calling existed; leave unset for v2).
@@ -317,7 +321,16 @@ else if (cmd === "subdomain") {
   const flags = JSON.parse("[" + tomlValue(/compatibility_flags\s*=\s*\[([^\]]*)\]/, '"nodejs_compat"') + "]");
   if (o.flags) for (const f of o.flags.split(",")) if (!flags.includes(f)) flags.push(f); // test-only override
   const metadata = { main_module: "worker.js", compatibility_date: tomlValue(/compatibility_date\s*=\s*"([^"]+)"/, "2026-10-01"), compatibility_flags: flags, bindings, observability: { enabled: true } };
-  await run(DEPLOY, { name: o.name, code: build(o.bundle), metadata, purge: o["purge-secret-bindings"] !== undefined ? SECRET_NAMES : [], subdomain: o.subdomain, cron: o.cron ? o.cron.split(";").map((x) => x.trim()).filter(Boolean) : [], migrateFrom: o["migrate-from"] }, o);
+  await run(DEPLOY, { name: o.name, code: build(o.bundle), metadata, purge: o["purge-secret-bindings"] !== undefined ? SECRET_NAMES : [], subdomain: o.subdomain, cron: o.cron ? o.cron.split(";").map((x) => x.trim()).filter(Boolean) : [], migrateFrom: o["migrate-from"], update: o.update !== undefined }, o);
+} else if (cmd === "check-name") {
+  // exit 0 = no Worker of that name in the account, 3 = one exists, 1 = could not check (deploy-cloudflare.sh uses this before deploying)
+  if (!NAME_RE.test(o.name || "")) die("--name must be lowercase letters, digits and dashes");
+  const { cloudflare, accountId } = restShim();
+  const r = await cloudflare.request({ method: "GET", path: "/accounts/" + accountId + "/workers/scripts" });
+  if (!r.success) die("could not list the account's Workers (" + r.status + ")");
+  const exists = (r.result || []).some((s) => s.id === o.name);
+  console.log(exists ? "exists" : "absent");
+  process.exit(exists ? 3 : 0);
 } else if (cmd === "teardown") {
   if (!NAME_RE.test(o.name || "")) die("--name must be lowercase letters, digits and dashes");
   await run(TEARDOWN, { name: o.name }, o);

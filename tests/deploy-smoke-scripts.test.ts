@@ -1,9 +1,9 @@
 // scripts/deploy-cloudflare.sh and scripts/smoke.sh, run for real against fakes: a stub `npx` on PATH stands in for
 // wrangler, and a local HTTP server stands in for the Worker. No network, no Cloudflare, no real secret.
-import { test } from "node:test";
+import { existsSync, test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
@@ -34,6 +34,7 @@ shift 2  # --no-install wrangler
 echo "$*" >> "${dir}/calls.log"
 case "$1" in
   whoami) exit 0 ;;
+  deployments) [ -n "\${FAKE_EXISTS:-}" ] && { echo "Created: 2026-10-01"; exit 0; }; echo "This Worker does not exist on your account. [code: 10007]" >&2; exit 1 ;;
   deploy) echo "Deployed https://wab-test.example.workers.dev"; exit 0 ;;
   secret) cat >/dev/null; [[ " \${FAKE_FAIL:-} " == *" $3 "* ]] && exit 1; exit 0 ;;
 esac
@@ -54,6 +55,29 @@ const deploy = (s: ReturnType<typeof sandbox>, args: string[], env: Record<strin
   run("bash", [join(s.dir, "scripts/deploy-cloudflare.sh"), ...args], { ...s.env, ...env }, s.dir);
 
 const FAKE_A = "fake-app-value-111", FAKE_B = "fake-access-value-222";
+
+test("deploy: one Worker per bot: an existing Worker this folder did not create is refused; --update or our own .deploy file allows it; --slug names wab-bot-<slug>", async () => {
+  const s = sandbox();
+  try {
+    let r = await deploy(s, ["--no-secrets"], { FAKE_EXISTS: "1" });
+    assert.equal(r.code, 1);
+    assert.match(r.err, /already exists in this Cloudflare account and was not created from this folder/);
+    assert.ok(!readFileSync(join(s.dir, "calls.log"), "utf8").split("\n").some((l) => /^deploy( |$)/.test(l)), "nothing deployed");
+    r = await deploy(s, ["--no-secrets", "--update"], { FAKE_EXISTS: "1" });
+    assert.equal(r.code, 0, r.err);
+    assert.ok(existsSync(join(s.dir, ".deploy/wab-test.owner")), "marked as created here");
+    r = await deploy(s, ["--no-secrets"], { FAKE_EXISTS: "1" });
+    assert.equal(r.code, 0, "our own Worker: redeploy is fine");
+    r = await deploy(s, ["--no-secrets", "--slug", "acme"]);
+    assert.equal(r.code, 0, r.err);
+    assert.match(readFileSync(join(s.dir, "calls.log"), "utf8"), /deploy --name wab-bot-acme/);
+    r = await deploy(s, ["--no-secrets", "--slug", "acme"], { FAKE_EXISTS: "1" });
+    assert.equal(r.code, 0, "created from this folder");
+    r = await deploy(s, ["--no-secrets", "--slug", "other"], { FAKE_EXISTS: "1" });
+    assert.equal(r.code, 1);
+    assert.equal((await deploy(s, ["--slug", "Bad_Slug"])).code, 1);
+  } finally { s.done(); }
+});
 
 test("deploy: skipped Meta secrets -> non-zero exit, names listed, no Done line", async () => {
   const s = sandbox();
