@@ -65,6 +65,13 @@ voice replies themselves still need `VOICE_REPLIES` (`mirror` recommended).
   (48 kHz, 64 kbit/s), which WhatsApp shows as a voice note, so it is uploaded as `audio/ogg` and sent as `type: "audio"` with `voice: true`
   through the same upload and send code as Workers AI replies. Nothing is decoded or re-encoded, so no Durable Object is involved.
 - **Model:** `eleven_v4` (default) was accepted by the public API on 2026-10-20; `eleven_v3` also works.
+- **Same request as the ElevenLabs studio:** only `text` and `model_id` are sent. No `voice_settings`, so the voice's own saved settings
+  apply (read them with `GET /v1/voices/<id>/settings`), and no `language_code`: forcing `"ar"` pushed a Lebanese voice toward standard
+  Arabic in an A/B run on 2026-10-20.
+- **Accent direction:** for an Arabic reply with `ARABIC_REPLY_DIALECT=lebanese` on a tag-aware model (`eleven_v3`, `eleven_v4`), the text
+  is sent as `[casual Beiruti Lebanese accent] <reply>`. The model reads the bracket as direction, not as words. In the same A/B run it
+  brought the voice closest to its approved studio sample. `ELEVENLABS_ACCENT_TAG=0` turns it off. Any square brackets in the reply
+  itself are removed before speaking, so neither the agent nor quoted customer text can add directions.
 - **Caps:** a reply longer than `ELEVENLABS_MAX_CHARS` (default 600) or `VOICE_MAX_CHARS` goes as text without any ElevenLabs call;
   audio over `VOICE_MAX_SECONDS` or 500 KB goes as text.
 - **Errors and quota:** any ElevenLabs error sends the text instead, once, with no retry. Codes: `voice_tts_el_quota` (quota or credits
@@ -82,28 +89,29 @@ voice replies themselves still need `VOICE_REPLIES` (`mirror` recommended).
 
 ## Arabic wording (Lebanese dialect)
 
-A voice reads exactly what the agent wrote, so formal Arabic or another dialect's words come out sounding foreign. While voice replies are
-on, `get_history` returns a `voice_reply` block: `expected` (true when the reply will be spoken), `provider`, `max_chars` and, with
-`ARABIC_REPLY_DIALECT=lebanese` (the default), `arabic_style`, the instruction to write a spoken Arabic reply in **Beiruti Lebanese dialect,
-in Arabic script**, not formal (فصحى) and not Syrian, Egyptian or Gulf forms. The `send_reply` tool description says the same. It asks for:
+A voice reads exactly what the agent wrote, so formal Arabic or another dialect's words come out sounding foreign: the wording matters as
+much as the voice. While voice replies are on, `get_history` returns a `voice_reply` block: `expected` (true when the reply will be spoken),
+`provider`, `max_chars` and, with `ARABIC_REPLY_DIALECT=lebanese` (the default), `arabic_style`, the instruction to write a spoken Arabic
+reply **colloquially, the way people talk in Beirut, in Arabic script**: never formal written Arabic (فصحى), and not Syrian, Egyptian,
+Gulf or generic Levantine phrasing. The `send_reply` tool description and the wake-routine prompt say the same. It asks for:
 
 | Use | Meaning | Never |
 | --- | --- | --- |
-| هلّق | now | |
-| شو | what | |
-| كيفك | how are you | |
-| منيح | good | |
-| بدّك | you want | |
-| عنّا | we have | |
+| أهلين فيك | welcome | |
+| كيفك | how are you | شلونك |
+| نحنا هون كرميلك (كرميلك said *kirmelak*) | we're here for you | كرمالك, منشان, مشان |
+| هلّق | now | الآن |
+| شو بتحب | what would you like | ماذا |
+| بدّك، عنّا، فيك، رح | you want, we have, you can, will | لدينا، يمكنك، سوف |
 | مش | not | مو |
-| كرميلك (said *kirmelak*) | for your sake | كرمالك, منشان |
-| بزبّطلك | I'll sort it for you | |
-| تكرم عينك | with pleasure | |
-| يسلملي قلبك | thank you (warm) | |
+| بزبّطلك ياها | I'll sort it for you | |
+| تكرم عينك، ولا يهمك | with pleasure, no problem | |
 | لكان | then / of course | |
+| يسلملي قلبك | thank you (warm) | شكراً جزيلاً |
+| تمانة، تلاتة، نصّ ساعة | numbers as spoken words | digits |
 
-and a short, natural reply with no lists, links, emojis or markdown. `ARABIC_REPLY_DIALECT=none` turns the hint off. Typed replies are not
-affected. The hint is advice to the agent; the bridge does not rewrite the text.
+and a short, natural reply with no lists, links, emojis, markdown or brackets. `ARABIC_REPLY_DIALECT=none` turns the hint (and the
+accent direction) off. Typed replies are not affected. The hint is advice to the agent; the bridge does not rewrite the text.
 
 ## The encoder and the CPU budget
 
@@ -131,6 +139,7 @@ affected. The hint is advice to the agent; the bridge does not rewrite the text.
 | `ELEVENLABS_VOICE_ID` | (unset) | The ElevenLabs voice to speak with |
 | `ELEVENLABS_MODEL_ID` | `eleven_v4` | ElevenLabs model (`eleven_v3` also works) |
 | `ELEVENLABS_MAX_CHARS` | 600 (20 to 1500) | Longer replies go as text, with no ElevenLabs call |
+| `ELEVENLABS_ACCENT_TAG` | on | `0` turns off the `[casual Beiruti Lebanese accent]` direction for Arabic on `eleven_v3` / `eleven_v4` |
 | `ARABIC_REPLY_DIALECT` | `lebanese` | Wording hint for spoken Arabic replies ([above](#arabic-wording-lebanese-dialect)); `none` turns it off |
 
 `send_reply` takes two optional fields: `reply_as` (`auto` by default, `text` or `voice`) and `voice_language` (two letters, for

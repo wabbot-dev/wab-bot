@@ -120,6 +120,8 @@ export interface Config {
   elevenlabsModelId: string;
   /** ELEVENLABS_MAX_CHARS (default 600, 20 to 1500): longer replies go as text (ElevenLabs bills per character) */
   elevenlabsMaxChars: number;
+  /** ELEVENLABS_ACCENT_TAG (default on; 0/off disables): with the Lebanese dialect, prefix Arabic text for eleven_v3/v4 with an accent direction */
+  elevenlabsAccentTag: boolean;
   /** ARABIC_REPLY_DIALECT (default lebanese; `none` turns the hint off): style hint for Arabic replies that will be spoken */
   arabicReplyDialect: ArabicReplyDialect;
 }
@@ -233,6 +235,7 @@ export function loadConfig(env: Env): Config {
     elevenlabsVoiceId: /^[A-Za-z0-9]{8,40}$/.test(env.ELEVENLABS_VOICE_ID?.trim() ?? "") ? env.ELEVENLABS_VOICE_ID!.trim() : undefined,
     elevenlabsModelId: /^[a-z0-9_]{3,60}$/.test(env.ELEVENLABS_MODEL_ID?.trim() ?? "") ? env.ELEVENLABS_MODEL_ID!.trim() : DEFAULT_ELEVENLABS_MODEL_ID,
     elevenlabsMaxChars: intIn(env.ELEVENLABS_MAX_CHARS, 600, 20, 1500),
+    elevenlabsAccentTag: !/^(0|false|no|off)$/i.test(env.ELEVENLABS_ACCENT_TAG?.trim() ?? ""),
     arabicReplyDialect: /^(none|off|0|false)$/i.test(env.ARABIC_REPLY_DIALECT?.trim() ?? "") ? "none" : "lebanese",
   };
 }

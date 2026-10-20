@@ -14,7 +14,7 @@ import { fetchTimeout, type Ctx } from "./ctx";
 import { aiErrorCode, oggOpusSeconds, recordCounts, type AiRunner, type MediaCounts } from "./media";
 import type { Config } from "./config";
 import { speakElevenLabs } from "./tts-elevenlabs";
-import { spokenStyle } from "./voice-style";
+import { LEBANESE_ACCENT_TAG, spokenStyle, supportsAudioTags } from "./voice-style";
 import type { Conv, Msg } from "./types";
 
 export type ReplyAs = "auto" | "text" | "voice";
@@ -176,6 +176,7 @@ export async function synthesize(ctx: Ctx, text: string, lang: string, where: "d
       return await speakElevenLabs(ctx.fetch, {
         text, apiKey: cfg.elevenlabsApiKey ?? "", voiceId: cfg.elevenlabsVoiceId ?? "", modelId: cfg.elevenlabsModelId,
         maxChars: cfg.elevenlabsMaxChars, maxSeconds: cfg.voiceMaxSeconds, timeoutMs: cfg.voiceTimeoutMs,
+        accentTag: lang === "ar" && cfg.arabicReplyDialect === "lebanese" && cfg.elevenlabsAccentTag && supportsAudioTags(cfg.elevenlabsModelId) ? LEBANESE_ACCENT_TAG : undefined,
       });
     } catch {
       return { ok: false, code: "voice_tts_el_error", count: { voice_tts_failed: 1 } };

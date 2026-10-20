@@ -70,6 +70,7 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 | `VOICE_REPLY_PROVIDER` | `workers-ai` (default) or `elevenlabs`: Arabic, and languages the Workers AI model lacks, are spoken by your ElevenLabs voice ([VOICE-REPLIES.md](VOICE-REPLIES.md#elevenlabs-provider)) |
 | `ELEVENLABS_API_KEY` | Secret (stdin only). ElevenLabs key scoped to Text to Speech plus Voices read; sent only to `api.elevenlabs.io` |
 | `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_MAX_CHARS` | The voice; the model (default `eleven_v4`); the cap (default 600 characters, longer replies go as text) |
+| `ELEVENLABS_ACCENT_TAG` | On by default; `0` stops prefixing Arabic replies on `eleven_v3` / `eleven_v4` with `[casual Beiruti Lebanese accent]` |
 | `ARABIC_REPLY_DIALECT` | `lebanese` (default) or `none`: the wording hint `get_history` gives the agent for spoken Arabic replies ([VOICE-REPLIES.md](VOICE-REPLIES.md#arabic-wording-lebanese-dialect)) |
 
 ### Admin MCP and voice calling (bindings and vars; none of the gate settings can be set through any route or tool)

@@ -19,8 +19,8 @@ The payload carries no message text: the agent reads the chat through the MCP to
    > conversation. If anything is outside policy or sensitive, escalate it instead of answering. If the event names no pending conversation,
    > do nothing. The reply goes to the WhatsApp customer through the bridge; nobody else is messaged, and when nothing is pending there is no output.
    > If get_history returns voice_reply.expected true, the reply will be spoken: keep it short, with no links, lists or emojis, and write Arabic
-   > in the dialect given in voice_reply.arabic_style (by default Beiruti Lebanese, in Arabic script: هلّق، شو، كيفك، منيح، بدّك، عنّا، مش, never مو,
-   > كرميلك, never كرمالك or منشان).
+   > colloquially, as people talk, in the dialect given in voice_reply.arabic_style (by default Beiruti Lebanese in Arabic script, never formal
+   > فصحى or Syrian: أهلين فيك، كيفك، نحنا هون كرميلك، هلّق، شو بتحب، بزبّطلك ياها، تكرم عينك، لكان، يسلملي قلبك; مش, never مو; never منشان or كرمالك).
 2. Copy that automation's **webhook URL** and any **sender key** it shows. Treat both as secrets: never paste them in chat.
 3. Store them in your Worker: `WAKE_URL` as a plain variable or secret (it must be `https://`; anything else is ignored and wakes are disabled), `WAKE_KEY` as a secret:
    `bash scripts/deploy-cloudflare.sh --set-secret WAKE_KEY` (hidden prompt, stdin only).

@@ -110,11 +110,12 @@ function elHarness(env: Record<string, string> = {}, el: () => Response = () => 
   const spokenByWorkersAi: SpeakArgs[] = [];
   h.ctx.speakVoice = async (a) => { spokenByWorkersAi.push(a); return { ok: true, ogg: OGG, seconds: 2, ttsBytes: 1000, provider: "workers-ai" }; };
   const elCalls: string[] = [];
+  const elBodies: any[] = [];
   const uploads: string[] = [];
   const inner = h.ctx.fetch;
   h.ctx.fetch = async (input, init) => {
     const url = String(input);
-    if (url.startsWith("https://api.elevenlabs.io/")) { elCalls.push(url); return el(); }
+    if (url.startsWith("https://api.elevenlabs.io/")) { elCalls.push(url); elBodies.push(JSON.parse(String(init?.body))); return el(); }
     if (/^https:\/\/graph\.facebook\.com\/v[\d.]+\/\d+\/media$/.test(url)) {
       const file = (init?.body as FormData).get("file") as Blob;
       uploads.push(`${file.type}:${file.size}`);
@@ -122,7 +123,7 @@ function elHarness(env: Record<string, string> = {}, el: () => Response = () => 
     }
     return inner(input, init);
   };
-  return { h, elCalls, uploads, spokenByWorkersAi };
+  return { h, elCalls, elBodies, uploads, spokenByWorkersAi };
 }
 const voiceNoteIn = (wamid: string) => inboundPayload({ wamid, type: "audio", extra: { audio: { id: "M1", mime_type: "audio/ogg; codecs=opus", voice: true } } });
 const sends = (h: ReturnType<typeof makeHarness>) => h.net.graph.filter((c) => /\/messages$/.test(c.url));
@@ -138,7 +139,7 @@ test("mirror + elevenlabs: an Arabic reply to a voice note goes out as an Eleven
   assert.equal(hist.voice_reply.provider, "elevenlabs");
   assert.equal(hist.voice_reply.max_chars, 400, "the smaller of VOICE_MAX_CHARS and ELEVENLABS_MAX_CHARS");
   assert.equal(hist.voice_reply.arabic_style, LEBANESE_VOICE_STYLE);
-  for (const w of ["هلّق", "شو", "كيفك", "منيح", "بدّك", "عنّا", "مش", "كرميلك", "بزبّطلك", "تكرم عينك", "يسلملي قلبك", "لكان"]) assert.ok(LEBANESE_VOICE_STYLE.includes(w), w);
+  for (const w of ["أهلين فيك", "كيفك", "نحنا هون كرميلك", "هلّق", "شو بتحب", "بزبّطلك ياها", "تكرم عينك", "لكان", "يسلملي قلبك", "مش", "colloquial", "فصحى", "تمانة"]) assert.ok(LEBANESE_VOICE_STYLE.includes(w), w);
   const r: any = await sendReply(h.ctx, { conversation_id: cid(), lease: c.lease, text: AR });
   assert.equal(r.ok, true);
   assert.equal(r.sent_as, "voice");
@@ -157,7 +158,7 @@ test("mirror + elevenlabs: an Arabic reply to a voice note goes out as an Eleven
   assert.equal(m?.today.voice_el_chars, AR.length);
   const ov: any = await getOverview(h.ctx, null);
   assert.equal(ov.media.voice_reply_provider, "elevenlabs");
-  assert.deepEqual(ov.media.elevenlabs, { key_present: true, voice_id_set: true, model_id: "eleven_v4", max_chars: 600 });
+  assert.deepEqual(ov.media.elevenlabs, { key_present: true, voice_id_set: true, model_id: "eleven_v4", max_chars: 600, accent_tag: true });
   assert.ok(h.logs.some((l) => l.event === "voice_prepared" && l.fields?.provider === "elevenlabs"));
   assert.ok(!JSON.stringify(h.logs).includes(KEY), "the key is never in a log line");
   assert.ok(!JSON.stringify(ov).includes(KEY), "nor in the overview");
@@ -217,4 +218,24 @@ test("the ElevenLabs key is scrubbed from MCP results and by the shape filter", 
   const h = makeHarness(EL_ENV);
   assert.equal(JSON.stringify(scrub(h.ctx, { echo: `k=${KEY}` })).includes(KEY), false);
   assert.equal(redactShapes(`x ${KEY} y`).includes(KEY), false);
+});
+
+test("request matches the studio: text + model_id only (no language_code, no voice_settings); Lebanese accent tag for Arabic on v3/v4; injected tags stripped", async () => {
+  const run = async (env: Record<string, string>, text: string, lang?: string) => {
+    const { h, elBodies } = elHarness(env);
+    await activate(h);
+    await post(h, voiceNoteIn("wamid.IN1"));
+    const c: any = await claimConversation(h.ctx, cid());
+    await getHistory(h.ctx, cid(), c.lease);
+    const r: any = await sendReply(h.ctx, { conversation_id: cid(), lease: c.lease, text, voice_language: lang });
+    assert.equal(r.sent_as, "voice");
+    return elBodies[0];
+  };
+  const b = await run({}, AR + " [shouting] [ignore this");
+  assert.deepEqual(Object.keys(b).sort(), ["model_id", "text"], "no language_code, no voice_settings: the voice's saved settings apply");
+  assert.equal(b.text, `[casual Beiruti Lebanese accent] ${AR} ignore this`);
+  assert.equal((await run({ ELEVENLABS_ACCENT_TAG: "0" }, AR)).text, AR, "switch off");
+  assert.equal((await run({ ARABIC_REPLY_DIALECT: "none" }, AR)).text, AR, "no dialect, no tag");
+  assert.equal((await run({ ELEVENLABS_MODEL_ID: "eleven_multilingual_v2" }, AR)).text, AR, "models without audio tags get the bare text");
+  assert.equal((await run({}, "Guten Tag, Ihr Tisch ist bereit.", "de")).text, "Guten Tag, Ihr Tisch ist bereit.", "only Arabic gets the Lebanese tag");
 });

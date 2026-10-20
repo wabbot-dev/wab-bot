@@ -135,7 +135,7 @@ function mediaOverview(ctx: Ctx, m: MediaMetrics | null, now: number): Json {
     voice_languages: voiceLanguagesOf(cfg),
     voice_reply_provider: cfg.voiceReplyProvider,
     ...(cfg.voiceReplyProvider === "elevenlabs"
-      ? { elevenlabs: { key_present: !!cfg.elevenlabsApiKey, voice_id_set: !!cfg.elevenlabsVoiceId, model_id: cfg.elevenlabsModelId, max_chars: cfg.elevenlabsMaxChars } }
+      ? { elevenlabs: { key_present: !!cfg.elevenlabsApiKey, voice_id_set: !!cfg.elevenlabsVoiceId, model_id: cfg.elevenlabsModelId, max_chars: cfg.elevenlabsMaxChars, accent_tag: cfg.elevenlabsAccentTag } }
       : {}),
     arabic_reply_dialect: cfg.arabicReplyDialect,
     voice_speaker_present: !!ctx.speakVoice,

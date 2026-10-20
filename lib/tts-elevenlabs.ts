@@ -6,9 +6,14 @@
  * WhatsApp shows as a voice note, so nothing is decoded or re-encoded and the call runs in the request itself (network wait, not CPU).
  * The key (ELEVENLABS_API_KEY) goes only to api.elevenlabs.io in the xi-api-key header. It is never logged, returned or stored by the
  * bridge; errors come back as short codes, never as the provider's response body. Nothing is retried.
+ *
+ * The request carries only text and model_id, like the ElevenLabs studio does: no voice_settings (the voice's own saved settings
+ * apply) and no language_code (forcing "ar" pushed the owner's Lebanese voice toward standard Arabic in the 2026-10-20 A/B run).
+ * For Arabic with the Lebanese dialect on, a tag-aware model gets one inline accent direction in front of the text (lib/voice-style.ts).
  */
 import { oggOpusSeconds, type MediaCounts } from "./media";
 import { isMonoOggOpus, speakable, type SpeakResult } from "./voice-reply";
+import { stripAudioTags } from "./voice-style";
 
 export const ELEVENLABS_HOST = "https://api.elevenlabs.io";
 export const ELEVENLABS_OUTPUT_FORMAT = "opus_48000_64";
@@ -23,6 +28,8 @@ export interface ElevenLabsArgs {
   maxChars: number;
   maxSeconds: number;
   timeoutMs: number;
+  /** optional inline direction for tag-aware models, e.g. "[casual Beiruti Lebanese accent]"; not counted against maxChars */
+  accentTag?: string;
 }
 
 const fail = (code: string, count: Partial<MediaCounts> = { voice_tts_failed: 1 }): SpeakResult => ({ ok: false, code: code.slice(0, 40), count });
@@ -48,7 +55,7 @@ export function elevenLabsErrorCode(status: number, body: unknown): string {
 export async function speakElevenLabs(fetcher: typeof fetch, a: ElevenLabsArgs): Promise<SpeakResult> {
   if (!a.apiKey) return fail("voice_tts_el_key_missing", { voice_language_unsupported: 1 });
   if (!a.voiceId) return fail("voice_tts_el_voice_missing", { voice_language_unsupported: 1 });
-  const spoken = speakable(a.text);
+  const spoken = stripAudioTags(speakable(a.text));
   if (!spoken) return { ok: false, code: "voice_empty_text", count: {} };
   if (spoken.length > a.maxChars) return { ok: false, code: "voice_too_long", count: {} };
   const url = `${ELEVENLABS_HOST}/v1/text-to-speech/${encodeURIComponent(a.voiceId)}?output_format=${ELEVENLABS_OUTPUT_FORMAT}`;
@@ -60,7 +67,7 @@ export async function speakElevenLabs(fetcher: typeof fetch, a: ElevenLabsArgs):
     res = await fetcher(url, {
       method: "POST",
       headers: { "xi-api-key": a.apiKey, "content-type": "application/json", accept: "audio/ogg" },
-      body: JSON.stringify({ text: spoken, model_id: a.modelId }),
+      body: JSON.stringify({ text: a.accentTag ? `${a.accentTag} ${spoken}` : spoken, model_id: a.modelId }),
       signal: ac.signal,
     });
     if (!res.ok) {
