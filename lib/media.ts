@@ -173,8 +173,13 @@ export function descriptionText(desc: string, caption?: string): string {
   return withCaption(caption ? `${head} |` : head, caption).slice(0, MAX_TEXT);
 }
 
+/** Workers AI's PDF conversion starts with a file title and a "## Metadata" list (PDF version, flags): no use to the agent, and it eats the cap. */
+export function stripDocMetadata(text: string): string {
+  return text.replace(/^\s*#\s[^\n]*\n+##\s*Metadata\n(?:[-*]\s[^\n]*\n?)*\s*(?:##\s*Contents\s*\n)?/, "").replace(/^###\s*Page 1\s*\n/, "");
+}
+
 export function documentText(j: Pick<MediaJob, "filename" | "caption">, text: string, max: number): string {
-  const t = text.replace(/\r/g, "").replace(/\n{3,}/g, "\n\n").trim();
+  const t = stripDocMetadata(text.replace(/\r/g, "")).replace(/\n{3,}/g, "\n\n").trim();
   if (!t) return withCaption(`[${docHead(j)}, read: no text found (a scan or photo?)]`, j.caption);
   const cut = t.length > max;
   const body = cut ? t.slice(0, max) : t;

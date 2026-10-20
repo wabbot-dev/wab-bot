@@ -68,6 +68,12 @@ test("document: unsupported type, conversion error, off switch and no toMarkdown
   assert.match((await getConv(d)).messages[0]!.text, /not read/);
 });
 
+test("documentText drops the PDF metadata header Workers AI adds (seen live), keeps the contents", () => {
+  const live = "# document.pdf\n## Metadata\n- PDFFormatVersion=1.4\n- IsLinearized=false\n- IsSignaturesPresent=false\n\n## Contents\n### Page 1\nOpening hours 9 to 5\nBulk price 12 USD per box\n";
+  assert.equal(documentText({ filename: "hours.pdf" }, live, 3000), '[document "hours.pdf", text extracted] Opening hours 9 to 5\nBulk price 12 USD per box');
+  assert.equal(documentText({}, "# Price list\n\nItem A", 3000), "[document, text extracted] # Price list\n\nItem A", "a normal heading stays");
+});
+
 test("documentText caps long text; empty text says it may be a scan", () => {
   assert.equal(documentText({ filename: "a.pdf" }, "x".repeat(50), 10), '[document "a.pdf", text extracted, first 10 characters] xxxxxxxxxx');
   assert.equal(documentText({}, "   ", 10), "[document, read: no text found (a scan or photo?)]");
