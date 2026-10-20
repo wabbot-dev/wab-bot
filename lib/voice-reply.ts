@@ -8,9 +8,11 @@
  * counted in get_overview's media block. Nothing is retried, nothing is logged but short codes, and no audio is persisted.
  *
  * VOICE_REPLY_PROVIDER=xai (lib/tts-xai.ts, the owner's xAI key, same as calls) or =elevenlabs (lib/tts-elevenlabs.ts, the owner's
- * ElevenLabs key and voice) speaks Arabic, and every language the Workers AI model lacks, instead. ElevenLabs returns Ogg Opus directly
- * (no encoder, no Durable Object); xAI returns MP3, encoded in the Durable Object like Workers AI audio. Optional, owner-set extras for
- * the spoken copy only: a dialect preset (ARABIC_REPLY_DIALECT), a pronunciation list (VOICE_PRONUNCIATIONS) and a style tag.
+ * ElevenLabs key and voices) speaks every language by default (VOICE_REPLY_ROUTING=all); VOICE_REPLY_ROUTING=non-workers-ai keeps the
+ * 0.4.x split (Workers AI for its own languages). ElevenLabs can use a voice, model and style tag per language (ELEVENLABS_VOICE_IDS,
+ * ELEVENLABS_MODEL_IDS, VOICE_STYLE_TAGS; ELEVENLABS_VOICE_ID is the fallback). ElevenLabs returns Ogg Opus directly (no encoder, no
+ * Durable Object); xAI returns MP3, encoded in the Durable Object like Workers AI audio. Optional, owner-set extras for the spoken copy
+ * only: a dialect preset (ARABIC_REPLY_DIALECT), a pronunciation list (VOICE_PRONUNCIATIONS) and a style tag.
  */
 import { fetchTimeout, type Ctx } from "./ctx";
 import { aiErrorCode, oggOpusSeconds, recordCounts, type AiRunner, type MediaCounts } from "./media";
@@ -18,6 +20,7 @@ import type { Config } from "./config";
 import { speakElevenLabs } from "./tts-elevenlabs";
 import { speakXai, xaiLanguage } from "./tts-xai";
 import { spokenCopy } from "./voice-pronounce";
+import { dictionariesFor } from "./voice-map";
 import { spokenStyle, supportsAudioTags } from "./voice-style";
 import type { Conv, Msg } from "./types";
 
@@ -112,7 +115,7 @@ export function isMonoOggOpus(b: Uint8Array): boolean {
 
 /** `xai` set = speak with xAI (key read inside the Durable Object, never passed in the call); otherwise the Workers AI model. */
 export interface SpeakArgs { text: string; lang: string; model: string; maxSeconds: number; timeoutMs: number; xai?: { voice: string; language: string; maxChars: number; replace?: Record<string, string> } }
-export type SpeakResult = { ok: true; ogg: Uint8Array; seconds: number; ttsBytes: number; provider?: TtsProvider } | { ok: false; code: string; count: Partial<MediaCounts> };
+export type SpeakResult = { ok: true; ogg: Uint8Array; seconds: number; ttsBytes: number; provider?: TtsProvider; voiceId?: string; voiceFrom?: string; modelId?: string; chars?: number; dictionaries?: number } | { ok: false; code: string; count: Partial<MediaCounts> };
 /** Text-to-speech + encoding in one step. In production a Durable Object runs it (src/call-do.ts), so the model's large audio
  *  answer is decoded and encoded there (30 s CPU per invocation) and only the small Ogg file comes back to the request. */
 export type VoiceSpeaker = (a: SpeakArgs) => Promise<SpeakResult>;
@@ -153,21 +156,51 @@ export async function speak(ai: AiRunner, encode: VoiceEncoder, a: SpeakArgs): P
 
 export type TtsProvider = "workers-ai" | "elevenlabs" | "xai";
 
+/** The ElevenLabs voice, model and style tag for `lang`: the per-language entry, else the single setting. `voiceFrom` says which. */
+export interface ElevenLabsVoice { voiceId?: string; modelId: string; styleTag?: string; voiceFrom: "language" | "default" | "none" }
+export function elevenLabsVoiceFor(cfg: Config, lang: string): ElevenLabsVoice {
+  const own = cfg.elevenlabsVoiceIds[lang];
+  const voiceId = own ?? cfg.elevenlabsVoiceId;
+  return {
+    voiceId,
+    modelId: cfg.elevenlabsModelIds[lang] ?? cfg.elevenlabsModelId,
+    styleTag: cfg.voiceStyleTags[lang] ?? cfg.voiceStyleTag,
+    voiceFrom: own ? "language" : voiceId ? "default" : "none",
+  };
+}
+
 /**
- * Which provider speaks `lang`. Workers AI (the default) keeps every language its model speaks. With VOICE_REPLY_PROVIDER=xai or
- * =elevenlabs, Arabic, and any language the Workers AI model lacks, go to that provider (both are multilingual). null = no voice.
+ * Which provider speaks `lang`. Workers AI (the default provider) speaks only its model's languages. With VOICE_REPLY_PROVIDER=xai or
+ * =elevenlabs, every two-letter language goes to that provider (VOICE_REPLY_ROUTING=all, the default), or only Arabic and the languages
+ * the Workers AI model lacks (=non-workers-ai). With ElevenLabs, a language that has no voice at all (no ELEVENLABS_VOICE_IDS entry and
+ * no ELEVENLABS_VOICE_ID) stays with Workers AI when its model speaks it. null = no voice for this language.
  */
 export function ttsProviderFor(cfg: Config, lang: string): TtsProvider | null {
   const workers = !!ttsLanguages(cfg.voiceTtsModel)[lang];
   const p = cfg.voiceReplyProvider;
-  if ((p === "elevenlabs" || p === "xai") && /^[a-z]{2}$/.test(lang) && (lang === "ar" || !workers)) return p;
+  if ((p === "elevenlabs" || p === "xai") && /^[a-z]{2}$/.test(lang)) {
+    const routed = cfg.voiceReplyRouting === "all" || lang === "ar" || !workers;
+    const voiced = p === "xai" || elevenLabsVoiceFor(cfg, lang).voiceFrom !== "none";
+    if (routed && (voiced || !workers)) return p;
+  }
   return workers ? "workers-ai" : null;
 }
 
-/** Languages the configured providers can speak, for get_overview ("*" = any other language, through xAI or ElevenLabs). */
+/** Languages the configured providers can speak, for get_overview ("*" = any other two-letter language, through xAI or ElevenLabs). */
 export function voiceLanguagesOf(cfg: Config): string[] {
   const w = Object.keys(ttsLanguages(cfg.voiceTtsModel));
-  return cfg.voiceReplyProvider === "workers-ai" ? w : ["ar", ...w.filter((l) => l !== "ar"), "*"];
+  if (cfg.voiceReplyProvider === "workers-ai") return w;
+  const own = cfg.voiceReplyProvider === "elevenlabs" ? Object.keys(cfg.elevenlabsVoiceIds) : [];
+  return [...new Set(["ar", ...own, ...w])].concat("*");
+}
+
+/** Which provider (and, for ElevenLabs, which voice) speaks each language, for get_overview. Ids only; never a key. */
+export function voiceRoutingOf(cfg: Config): Record<string, unknown> {
+  const langs = [...new Set(["ar", ...Object.keys(cfg.elevenlabsVoiceIds), ...Object.keys(ttsLanguages(cfg.voiceTtsModel))])];
+  const by: Record<string, string> = {};
+  for (const l of langs) by[l] = ttsProviderFor(cfg, l) ?? "none";
+  const other = cfg.voiceReplyProvider === "workers-ai" ? "none" : ttsProviderFor(cfg, "xx") ?? "none";
+  return { routing: cfg.voiceReplyRouting, provider_by_language: by, other_languages: other };
 }
 
 /** Speak `text` in `lang` with the configured model: through ctx.speakVoice (the Durable Object), or `inline` in this request (self-test). */
@@ -181,12 +214,21 @@ export async function synthesize(ctx: Ctx, text: string, lang: string, where: "d
   if (p.changes) ctx.log("voice_pronounce", { lang, changes: p.changes });
   if (provider === "elevenlabs") {
     // a network call, not CPU work: it runs in this request (no Durable Object needed); the key goes to api.elevenlabs.io only
+    const v = elevenLabsVoiceFor(cfg, lang);
+    const ig = cfg.voiceMapIgnored;
+    if (ig.voice_ids || ig.model_ids || ig.style_tags || ig.pronunciation_dictionaries) ctx.log("voice_map_ignored", ig);
+    // order: the bot's own respelling above (VOICE_PRONUNCIATIONS, preset marks) shapes the text first; ElevenLabs then applies the
+    // owner's dictionaries to the text it receives (whole-word rules), so a word the list already respelled no longer matches a rule
+    const dicts = dictionariesFor(cfg.elevenlabsDictionaries, lang);
     try {
-      return await speakElevenLabs(ctx.fetch, {
-        text: p.text, apiKey: cfg.elevenlabsApiKey ?? "", voiceId: cfg.elevenlabsVoiceId ?? "", modelId: cfg.elevenlabsModelId,
+      const r = await speakElevenLabs(ctx.fetch, {
+        text: p.text, apiKey: cfg.elevenlabsApiKey ?? "", voiceId: v.voiceId ?? "", modelId: v.modelId,
         maxChars: cfg.elevenlabsMaxChars, maxSeconds: cfg.voiceMaxSeconds, timeoutMs: cfg.voiceTimeoutMs,
-        accentTag: cfg.voiceStyleTag && supportsAudioTags(cfg.elevenlabsModelId) ? cfg.voiceStyleTag : undefined,
+        accentTag: v.styleTag && supportsAudioTags(v.modelId) ? v.styleTag : undefined,
+        ...(dicts.length ? { dictionaries: dicts } : {}),
       });
+      ctx.log("voice_el_voice", { lang, voice_from: v.voiceFrom, dictionaries: dicts.length, ok: r.ok });
+      return r.ok ? { ...r, voiceId: v.voiceId, voiceFrom: v.voiceFrom, modelId: v.modelId, dictionaries: dicts.length } : r;
     } catch {
       return { ok: false, code: "voice_tts_el_error", count: { voice_tts_failed: 1 } };
     }

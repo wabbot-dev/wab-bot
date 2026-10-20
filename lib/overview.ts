@@ -4,7 +4,7 @@ import { CONTROLS_KEY, controlsOf } from "./controls";
 import { readAll, REJECTIONS_KEY } from "./store";
 import type { Conv, ConvState, Rejections } from "./types";
 import { FREE_NEURONS_PER_DAY, MEDIA_METRICS_KEY, NEURONS_PER_AUDIO_MINUTE, NEURONS_PER_M_TOKENS, NEURONS_PER_TTS_1K_CHARS, NEURONS_PER_TTS_MINUTE, utcDay, zeroCounts, type MediaMetrics } from "./media";
-import { voiceLanguagesOf } from "./voice-reply";
+import { voiceLanguagesOf, voiceRoutingOf } from "./voice-reply";
 import { ALERTS_KEY, type AlertRecord } from "./alerts";
 
 /**
@@ -149,8 +149,20 @@ function mediaOverview(ctx: Ctx, m: MediaMetrics | null, now: number): Json {
     voice_tts_model: cfg.voiceTtsModel,
     voice_languages: voiceLanguagesOf(cfg),
     voice_reply_provider: cfg.voiceReplyProvider,
+    voice_routing: voiceRoutingOf(cfg),
     ...(cfg.voiceReplyProvider === "elevenlabs"
-      ? { elevenlabs: { key_present: !!cfg.elevenlabsApiKey, voice_id_set: !!cfg.elevenlabsVoiceId, model_id: cfg.elevenlabsModelId, max_chars: cfg.elevenlabsMaxChars, style_tag_set: !!cfg.voiceStyleTag } }
+      ? {
+          elevenlabs: {
+            key_present: !!cfg.elevenlabsApiKey, voice_id_set: !!cfg.elevenlabsVoiceId, model_id: cfg.elevenlabsModelId, max_chars: cfg.elevenlabsMaxChars, style_tag_set: !!cfg.voiceStyleTag,
+            // per-language mapping: voice ids are not secrets (the key never appears here); "*" = the fallback for every other language
+            voices: { ...cfg.elevenlabsVoiceIds, "*": cfg.elevenlabsVoiceId ?? null },
+            model_ids: { ...cfg.elevenlabsModelIds },
+            style_tag_languages: Object.keys(cfg.voiceStyleTags),
+            // the owner's pronunciation dictionaries (ids and versions only): "*" = every language, then per language
+            pronunciation_dictionaries: { ...Object.fromEntries(Object.entries(cfg.elevenlabsDictionaries.byLang).map(([l, d]) => [l, d.map((x) => `${x.pronunciation_dictionary_id}:${x.version_id ?? "latest"}`)])), "*": cfg.elevenlabsDictionaries.all.map((x) => `${x.pronunciation_dictionary_id}:${x.version_id ?? "latest"}`) },
+            ignored_entries: cfg.voiceMapIgnored,
+          },
+        }
       : {}),
     ...(cfg.voiceReplyProvider === "xai" ? { xai: { key_present: !!cfg.xaiApiKey, voice: cfg.xaiTtsVoice, arabic_locale: cfg.xaiTtsArabicLocale ?? null } } : {}),
     pronunciations_count: Object.keys(cfg.voicePronunciations).length,

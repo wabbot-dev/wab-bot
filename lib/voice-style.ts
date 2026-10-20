@@ -5,9 +5,19 @@
  *
  * ARABIC_REPLY_DIALECT selects the preset: `none` (default: no hint, the agent writes as it would for text), `msa` (Modern Standard
  * Arabic), `lebanese`, `gulf`, `egyptian`. A voice reads exactly what is written, so a dialect reply must be WRITTEN in that dialect.
- * Presets are generic language guidance only: no business words, no voice ids, no studio scripts.
+ * Presets are generic language guidance only: no business words, no voice ids, no studio scripts. Every preset addresses the customer in
+ * the plural (gender-neutral; NEUTRAL_ADDRESS below).
  */
 import type { ArabicReplyDialect } from "./config";
+
+/**
+ * Address the customer without assuming their gender (owner decision, 2026-10-21): a name, a voice or a profile picture says nothing
+ * reliable about it. Arabic marks gender on "you" (فيكَ / فيكِ), so the presets use the plural address, which is natural and polite in
+ * every dialect; other gendered languages use neutral wording. Exported so the text-reply guidance (lib/mcp.ts) and the call persona
+ * (lib/call-persona.ts) say the same thing.
+ */
+export const NEUTRAL_ADDRESS =
+  "Address the customer without assuming their gender: in Arabic use the plural you (إنتو / أنتم with the plural endings, e.g. -كن or -كم) instead of a masculine or feminine singular; in other languages with gendered forms (French, Spanish, Hebrew, ...) choose wording that marks no gender (for example a polite plural, or rephrase to avoid gendered adjectives and titles).";
 
 const COMMON =
   "Keep it short and natural (one to three short sentences, under the spoken length cap); no lists, links, emojis, markdown or [brackets], because a voice reads them out. Write numbers and times as words.";
@@ -16,24 +26,28 @@ export const DIALECT_STYLES: Record<Exclude<ArabicReplyDialect, "none">, string>
   msa: [
     "If this reply is in Arabic it will be SPOKEN as a voice note: write clear, simple Modern Standard Arabic (فصحى مبسطة), polite and warm, in Arabic script.",
     "Avoid rare words and long sentences; add no vowel marks except where a word would be misread.",
+    "Address the customer in the plural, never a masculine or feminine singular: أنتم with -كم endings (يمكنكم، لديكم، أهلاً بكم).",
     COMMON,
   ].join(" "),
   lebanese: [
     "If this reply is in Arabic it will be SPOKEN as a voice note, so write it the way people TALK in Lebanon: colloquial Lebanese Arabic, in Arabic script, warm and natural.",
     "Not formal Arabic (no فصحى) and not another dialect's phrasing.",
-    "Typical spoken forms: أهلا فيك، كيفك، هلّق، شو، بدّك، عنّا، فيك، رح، منيح، كتير، إيه؛ negation with مش.",
-    "Swap formal words for spoken ones: الآن → هلّق، ماذا → شو، نحن → نحنا، لدينا → عنّا، يمكنك → فيك، سوف → رح، جداً → كتير، نعم → إيه؛ drop هل in questions.",
-    "Put shadda (ّ) on doubled letters (هلّق، بدّك، عنّا، كلّ، مرّة) and no other vowel marks.",
+    "Address the customer in the plural (إنتو with the -كن endings), never a masculine or feminine singular: أهلا فيكن، كيفكن، بدّكن، فيكن، عندكن، تفضّلوا.",
+    "Typical spoken forms: هلّق، شو، عنّا، رح، منيح، كتير، إيه؛ negation with مش.",
+    "Swap formal words for spoken ones: الآن → هلّق، ماذا → شو، نحن → نحنا، لدينا → عنّا، يمكنكم → فيكن، سوف → رح، جداً → كتير، نعم → إيه؛ drop هل in questions.",
+    "Put shadda (ّ) on doubled letters (هلّق، بدّكن، عنّا، كلّ، مرّة) and no other vowel marks.",
     COMMON,
   ].join(" "),
   gulf: [
     "If this reply is in Arabic it will be SPOKEN as a voice note, so write it in natural Gulf Arabic (Khaleeji), in Arabic script, polite and warm.",
-    "Not formal Arabic (no فصحى) and not another dialect's phrasing. Typical spoken forms: هلا والله، شلونك، الحين، وش، أبي، عندنا، تقدر، إن شاء الله؛ negation with مو or ما.",
+    "Not formal Arabic (no فصحى) and not another dialect's phrasing. Typical spoken forms: هلا والله، الحين، وش، عندنا، إن شاء الله؛ negation with مو or ما.",
+    "Address the customer in the plural (إنتو / إنتم with -كم endings), never a masculine or feminine singular: هلا فيكم، شلونكم، تقدرون، تبون.",
     COMMON,
   ].join(" "),
   egyptian: [
     "If this reply is in Arabic it will be SPOKEN as a voice note, so write it in natural Egyptian Arabic, in Arabic script, friendly and polite.",
-    "Not formal Arabic (no فصحى) and not another dialect's phrasing. Typical spoken forms: أهلاً بيك، إزيك، دلوقتي، إيه، عايز، عندنا، تقدر، حاضر؛ negation with مش.",
+    "Not formal Arabic (no فصحى) and not another dialect's phrasing. Typical spoken forms: دلوقتي، إيه، عندنا، حاضر؛ negation with مش.",
+    "Address the customer in the plural (إنتو with -كو endings), never a masculine or feminine singular: أهلاً بيكو، إزيكو، عايزين، تقدروا.",
     COMMON,
   ].join(" "),
 };

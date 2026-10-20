@@ -23,7 +23,12 @@ export interface Env {
   VOICE_TIMEOUT_MS?: string;
   VOICE_REPLY_PROVIDER?: string;
   ELEVENLABS_API_KEY?: string;
+  VOICE_REPLY_ROUTING?: string;
   ELEVENLABS_VOICE_ID?: string;
+  ELEVENLABS_VOICE_IDS?: string;
+  ELEVENLABS_MODEL_IDS?: string;
+  VOICE_STYLE_TAGS?: string;
+  ELEVENLABS_PRONUNCIATION_DICTIONARIES?: string;
   ELEVENLABS_MODEL_ID?: string;
   ELEVENLABS_MAX_CHARS?: string;
   VOICE_STYLE_TAG?: string;

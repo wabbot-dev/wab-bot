@@ -1,5 +1,6 @@
 import { parsePronunciations } from "./voice-pronounce";
 import { styleTagOf } from "./voice-style";
+import { parseDictionaries, parseLangMap, type DictLocator, type LangMap } from "./voice-map";
 /** Workers AI defaults for inbound media (docs/MEDIA.md). */
 export const DEFAULT_STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
 export const DEFAULT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
@@ -7,9 +8,14 @@ export const DEFAULT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 export const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
 export type VoiceRepliesMode = "off" | "mirror" | "on";
 /** VOICE_REPLY_PROVIDER: who speaks voice-note replies. `workers-ai` (default) = Workers AI only (no Arabic); `xai` (the owner's xAI
- *  key, same as calls) or `elevenlabs` (the owner's ElevenLabs key and voice) speak Arabic and every language the Workers AI model lacks,
- *  Workers AI keeps the rest (docs/VOICE-REPLIES.md). */
+ *  key, same as calls) or `elevenlabs` (the owner's ElevenLabs key and voices) speak EVERY language by default (VOICE_REPLY_ROUTING=all),
+ *  or only Arabic and the languages the Workers AI model lacks with VOICE_REPLY_ROUTING=non-workers-ai (docs/VOICE-REPLIES.md). */
 export type VoiceReplyProvider = "workers-ai" | "elevenlabs" | "xai";
+/** VOICE_REPLY_ROUTING (xai / elevenlabs only): `all` (default since 0.5.0) or `non-workers-ai` (the 0.4.x behaviour: Workers AI keeps its languages). */
+export type VoiceReplyRouting = "all" | "non-workers-ai";
+/** ElevenLabs voice ids are letters and digits; model ids lower-case words (eleven_v4). Anything else is ignored, never sent. */
+export const ELEVENLABS_VOICE_ID_RE = /^[A-Za-z0-9]{8,40}$/;
+export const ELEVENLABS_MODEL_ID_RE = /^[a-z0-9_]{3,60}$/;
 /** ELEVENLABS_MODEL_ID default (tested live on the public API on 2026-10-20; eleven_v3 also works). */
 export const DEFAULT_ELEVENLABS_MODEL_ID = "eleven_v4";
 /** XAI_TTS_VOICE default (docs.x.ai text-to-speech: every voice speaks every supported language) */
@@ -159,8 +165,20 @@ export interface Config {
   voiceReplyProvider: VoiceReplyProvider;
   /** ELEVENLABS_API_KEY (secret): sent only to api.elevenlabs.io (xi-api-key header). Never logged or returned. */
   elevenlabsApiKey?: string;
-  /** ELEVENLABS_VOICE_ID: the owner's chosen ElevenLabs voice (letters and digits) */
+  /** VOICE_REPLY_ROUTING (default all): with xai or elevenlabs, `all` languages go to that provider; `non-workers-ai` keeps Workers AI for its own */
+  voiceReplyRouting: VoiceReplyRouting;
+  /** ELEVENLABS_VOICE_ID: the owner's chosen ElevenLabs voice (letters and digits); the fallback for every language without its own voice */
   elevenlabsVoiceId?: string;
+  /** ELEVENLABS_VOICE_IDS (optional, e.g. "ar=<id>,en=<id>" or JSON): a voice per language; ids are not secret */
+  elevenlabsVoiceIds: LangMap;
+  /** ELEVENLABS_MODEL_IDS (optional, e.g. "ar=eleven_v3"): a model per language; ELEVENLABS_MODEL_ID for the rest */
+  elevenlabsModelIds: LangMap;
+  /** VOICE_STYLE_TAGS (optional, e.g. "ar=[warm]; en=[calm, friendly]"): a style tag per language; VOICE_STYLE_TAG for the rest */
+  voiceStyleTags: LangMap;
+  /** ELEVENLABS_PRONUNCIATION_DICTIONARIES (optional): the owner's dictionaries, for every language (`all`) and per language */
+  elevenlabsDictionaries: { all: DictLocator[]; byLang: Readonly<Record<string, DictLocator[]>> };
+  /** malformed entries skipped in the maps above (logged as voice_map_ignored, shown in get_overview; never fatal) */
+  voiceMapIgnored: { voice_ids: number; model_ids: number; style_tags: number; pronunciation_dictionaries: number };
   /** ELEVENLABS_MODEL_ID (default eleven_v4) */
   elevenlabsModelId: string;
   /** ELEVENLABS_MAX_CHARS (default 600, 20 to 1500): longer replies go as text (ElevenLabs bills per character) */
@@ -320,8 +338,18 @@ export function loadConfig(env: Env): Config {
     voiceTimeoutMs: intIn(env.VOICE_TIMEOUT_MS, 15000, 2000, 20000),
     voiceReplyProvider: ((p) => (p === "elevenlabs" || p === "xai" ? p : "workers-ai"))(env.VOICE_REPLY_PROVIDER?.trim().toLowerCase()),
     elevenlabsApiKey: env.ELEVENLABS_API_KEY?.trim() || undefined,
-    elevenlabsVoiceId: /^[A-Za-z0-9]{8,40}$/.test(env.ELEVENLABS_VOICE_ID?.trim() ?? "") ? env.ELEVENLABS_VOICE_ID!.trim() : undefined,
-    elevenlabsModelId: /^[a-z0-9_]{3,60}$/.test(env.ELEVENLABS_MODEL_ID?.trim() ?? "") ? env.ELEVENLABS_MODEL_ID!.trim() : DEFAULT_ELEVENLABS_MODEL_ID,
+    voiceReplyRouting: /^non-workers-ai$/i.test(env.VOICE_REPLY_ROUTING?.trim() ?? "") ? "non-workers-ai" : "all",
+    elevenlabsVoiceId: ELEVENLABS_VOICE_ID_RE.test(env.ELEVENLABS_VOICE_ID?.trim() ?? "") ? env.ELEVENLABS_VOICE_ID!.trim() : undefined,
+    ...((v, m, t, d) => ({
+      elevenlabsVoiceIds: v.map, elevenlabsModelIds: m.map, voiceStyleTags: t.map, elevenlabsDictionaries: { all: d.all, byLang: d.byLang },
+      voiceMapIgnored: { voice_ids: v.ignored, model_ids: m.ignored, style_tags: t.ignored, pronunciation_dictionaries: d.ignored },
+    }))(
+      parseLangMap(env.ELEVENLABS_VOICE_IDS, (x) => (ELEVENLABS_VOICE_ID_RE.test(x) ? x : undefined)),
+      parseLangMap(env.ELEVENLABS_MODEL_IDS, (x) => (ELEVENLABS_MODEL_ID_RE.test(x) ? x : undefined)),
+      parseLangMap(env.VOICE_STYLE_TAGS, styleTagOf, { commas: false }),
+      parseDictionaries(env.ELEVENLABS_PRONUNCIATION_DICTIONARIES),
+    ),
+    elevenlabsModelId: ELEVENLABS_MODEL_ID_RE.test(env.ELEVENLABS_MODEL_ID?.trim() ?? "") ? env.ELEVENLABS_MODEL_ID!.trim() : DEFAULT_ELEVENLABS_MODEL_ID,
     elevenlabsMaxChars: intIn(env.ELEVENLABS_MAX_CHARS, 600, 20, 1500),
     voiceStyleTag: styleTagOf(env.VOICE_STYLE_TAG),
     voicePronunciations: parsePronunciations(env.VOICE_PRONUNCIATIONS),
