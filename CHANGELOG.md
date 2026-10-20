@@ -4,6 +4,10 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-21 (preview)
+
+Voice-note replies in any language with the provider you chose, a voice per language, ElevenLabs pronunciation dictionaries, and gender-neutral address. **Behaviour change** for deployments that already use `VOICE_REPLY_PROVIDER=elevenlabs` or `xai`: see the first item.
+
 ### Changed
 - **Behaviour change: xAI and ElevenLabs speak every language** ([docs/VOICE-REPLIES.md](docs/VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)). With `VOICE_REPLY_PROVIDER=elevenlabs` or `=xai`, English, French, Spanish, Chinese, Japanese and Korean voice replies are now spoken by that provider too (before: always Workers AI), so one bot has one voice quality in every language. **This uses your ElevenLabs characters or xAI credits for those languages instead of free Workers AI Neurons.** Set `VOICE_REPLY_ROUTING=non-workers-ai` to keep the 0.4.x split. Deployments on the default `workers-ai` provider are not affected. With ElevenLabs, a Workers AI language with no ElevenLabs voice configured stays on Workers AI.
 - **Gender-neutral address**: the Arabic dialect presets address the customer in the plural (إنتو, `-كن` / `-كم` / `-كو` endings) instead of the masculine singular; the `send_reply` tool description and the default call instructions tell the agent not to assume the customer's gender (Arabic plural address; neutral wording in other gendered languages). Owner-written `CALL_INSTRUCTIONS` are unchanged.
