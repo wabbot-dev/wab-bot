@@ -14,7 +14,9 @@
  *      vowel classed from F1/F2 as "ii" (F1 < 420 Hz, F2 > 1950 Hz), "e" (F1 420-610, F2 > 1700) or "a", and the longest run of each
  *      measured; a respelling that gives a long "ii" run fails, and "a" is preferred to "ii". Kept (2-6 takes each, no long "ii"):
  *        ساعة → سَيْعة (so الساعة → السَيْعة; "se3a": an "e" of 50-85 ms in 4 of 6 takes, otherwise "a"; السيعة and السَيعة
- *          start with 25-70 ms of "ii", the "see3a" the owner heard), دوام → دوِم ("dawem"; "e" 45-85 ms; دويم was "ii"),
+ *          start with 25-70 ms of "ii", the "see3a" the owner heard), دوام → دَويم (the owner's own spelling, 2026-10-20: الدوِم
+ *          came out "doom"; with الدَويم Nick says a short open "da" (~55 ms, F1 ≈ 550-610 Hz), a consonant w, then a front
+ *          vowel of ~100-110 ms at F1 ≈ 380-470, F2 ≈ 1950-2250, close to "ee"; kept as the owner chose it),
  *        فاتحين → فِتحين ("fet7in"; "e" 80-90 ms; فيتحين was "ii" 95 ms), لازم → ليزم ("lezem"; "e" 75 ms, no "ii"),
  *        ياها → يَها ("yeha"; "e" 50-90 ms; ييها was "ii" 110 ms), بلاش → بلَيْش ("blesh"; "e" 65-75 ms),
  *        تاني → تِني ("tene"; a short "e" 20-35 ms; تيني was "ii").
@@ -58,7 +60,7 @@ export const IMALA_VOICES: readonly string[] = ["VsqtGXzc5Y1q5G3RuCrZ"]; // Nick
 export const IMALA_RESPELL: Record<string, string> = {
   "ساعة": "سَيْعة", // overrides RESPELL's سيعة for these voices (said "see3a")
   "ساعه": "سَيْعة",
-  "دوام": "دوِم",
+  "دوام": "دَويم", // the owner's spelling (الدَويم)
   "فاتحين": "فِتحين",
   "لازم": "ليزم",
   "ياها": "يَها",

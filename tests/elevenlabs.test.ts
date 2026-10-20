@@ -271,7 +271,8 @@ test("pronunciation layer: clitics and every ساعة form; no false matches; am
 test("pronunciation layer: imala respellings (a short Beiruti e) for the Nick voice, with clitics; the rest untouched", () => {
   const nick = { voiceId: "VsqtGXzc5Y1q5G3RuCrZ" };
   const t = (s: string) => lebaneseSpoken(s, nick).text;
-  assert.equal(t("وعن الدوام، نحنا فاتحين من الساعة اتنعش"), "وعن الدوِم، نحنا فِتحين من السَيْعة اتنعش");
+  assert.equal(t("وعن الدوام، نحنا فاتحين من الساعة اتنعش"), "وعن الدَويم، نحنا فِتحين من السَيْعة اتنعش");
+  assert.equal(t("دوام كامل، بالدوام"), "دَويم كامل، بالدَويم", "دوام with and without ال");
   assert.equal(t("عالساعة عشرة، نصّ ساعة"), "عالسَيْعة عشرة، نصّ سَيْعة", "Nick: سَيْعة, not السيعة (said see3a)");
   assert.equal(t("مش لازم، ولازم تجرّب"), "مش ليزم، وليزم تجرّب");
   assert.equal(t("بزبّطلك ياها، التوصيل ببلاش، شي تاني"), "بزبّطلك يَها، التوصيل ببلَيْش، شي تِني");
