@@ -122,7 +122,7 @@ call finish_conversation '{"conversation_id":"c_<id>","lease":"<lease>"}'
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (404 if unknown or already erased)
+# {"ok":true,"deleted":true}   (407 if unknown or already erased)
 ```
 
 **모두 제거:** `bash scripts/teardown-cloudflare.sh`(Worker 이름을 입력하라고 요청하며, Worker와 저장된 모든 대화를 삭제하고 그 외에는 아무것도 삭제하지 않습니다).

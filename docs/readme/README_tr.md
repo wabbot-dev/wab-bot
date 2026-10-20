@@ -30,7 +30,7 @@
 > Bu proje bağımsızdır: Meta veya xAI ile bağlantılı değildir ve onlar tarafından onaylanmamıştır. WhatsApp ve Grok, sahiplerinin ticari markalarıdır.
 
 > [!NOTE]
-> **Önizleme.** Yerelde sahte nesnelere karşı test edildi (404 otomatik test). Önceki sürümler tek kullanımlık bir Cloudflare Free hesabında canlı çalıştırıldı. Meta'nın ücretsiz **test** numarasındaki canlı kanıt: **mesajlaşma** 2026-10-16'da canlı çalıştırıldı (gerçek bir metin gidiş-dönüşü: gelen bir mesaj alındı ve köprü üzerinden yanıt gönderildi), **arama** ise 2026-10-17'de bu deponun koduyla canlı çalıştırıldı (Grok Voice, Meta SIP üzerinden xAI SIP'e): gelen WhatsApp sesli aramaları yapay zekâ tarafından yanıtlandı, konuşma iki yönlü oldu (Arapça dahil), iki tarafın dökümü de saklandı, modelin `end_call` çağrısı Worker tarafından işlendi ve xAI'nin kapatma isteği kabul edildi (HTTP 200); arama kapısı devreye girip kendiliğinden kapandı. İşletme doğrulaması yapılmış bir üretim numarası değildir; ses kaydı desteklenmez. Bu proje tarafından üretimde çalıştırılmadı. Mesajlaşma tasarımının, türetildiği dağıtımda üretimde kanıtlandığı sahibi tarafından bildirilmiştir (sahibinin beyanı, tarih belirlenecek); bu, bu kod için kanıt değildir. Doğrulanan her şey ve nasıl doğrulandığı: [docs/STATUS.md](../STATUS.md).
+> **Önizleme.** Yerelde sahte nesnelere karşı test edildi (407 otomatik test). Önceki sürümler tek kullanımlık bir Cloudflare Free hesabında canlı çalıştırıldı. Meta'nın ücretsiz **test** numarasındaki canlı kanıt: **mesajlaşma** 2026-10-16'da canlı çalıştırıldı (gerçek bir metin gidiş-dönüşü: gelen bir mesaj alındı ve köprü üzerinden yanıt gönderildi), **arama** ise 2026-10-17'de bu deponun koduyla canlı çalıştırıldı (Grok Voice, Meta SIP üzerinden xAI SIP'e): gelen WhatsApp sesli aramaları yapay zekâ tarafından yanıtlandı, konuşma iki yönlü oldu (Arapça dahil), iki tarafın dökümü de saklandı, modelin `end_call` çağrısı Worker tarafından işlendi ve xAI'nin kapatma isteği kabul edildi (HTTP 200); arama kapısı devreye girip kendiliğinden kapandı. İşletme doğrulaması yapılmış bir üretim numarası değildir; ses kaydı desteklenmez. Bu proje tarafından üretimde çalıştırılmadı. Mesajlaşma tasarımının, türetildiği dağıtımda üretimde kanıtlandığı sahibi tarafından bildirilmiştir (sahibinin beyanı, tarih belirlenecek); bu, bu kod için kanıt değildir. Doğrulanan her şey ve nasıl doğrulandığı: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -122,7 +122,7 @@ call finish_conversation '{"conversation_id":"c_<id>","lease":"<lease>"}'
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (404 if unknown or already erased)
+# {"ok":true,"deleted":true}   (407 if unknown or already erased)
 ```
 
 **Her şeyi kaldırma:** `bash scripts/teardown-cloudflare.sh` (Worker adını yazmanızı ister; Worker'ı ve saklanan tüm konuşmaları siler, başka hiçbir şeyi silmez).

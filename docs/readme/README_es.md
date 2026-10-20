@@ -30,7 +30,7 @@
 > Este proyecto es independiente: no está afiliado a Meta ni a xAI ni cuenta con su respaldo. WhatsApp y Grok son marcas de sus respectivos propietarios.
 
 > [!NOTE]
-> **Vista previa.** Probado en local contra simulaciones (404 pruebas automáticas). Las revisiones anteriores se ejecutaron en vivo en una cuenta desechable de Cloudflare Free. Evidencia en vivo en el número de **prueba** gratuito de Meta: el **texto** se ejecutó en vivo el 2026-10-16 (un intercambio real de texto: se recibió un mensaje entrante y se devolvió una respuesta a través del puente), y las **llamadas** se ejecutaron en vivo el 2026-10-17 con el código de este repositorio (Grok Voice sobre Meta SIP hacia xAI SIP): la IA atendió llamadas de voz entrantes de WhatsApp, la conversación fue en ambos sentidos (también en árabe), se guardaron las transcripciones de ambas partes, el Worker gestionó el `end_call` del modelo y xAI aceptó la petición de colgar (HTTP 200), y la compuerta de llamadas se armó y se desarmó sola. No es un número de producción verificado como empresa; no se admite grabar el audio. Este proyecto no lo ha ejecutado en producción. Su propietario informa de que el diseño de mensajería está probado en producción en el despliegue del que deriva (informado por el propietario, fecha por determinar), lo cual no es evidencia de este código. Todo lo verificado y cómo: [docs/STATUS.md](../STATUS.md).
+> **Vista previa.** Probado en local contra simulaciones (407 pruebas automáticas). Las revisiones anteriores se ejecutaron en vivo en una cuenta desechable de Cloudflare Free. Evidencia en vivo en el número de **prueba** gratuito de Meta: el **texto** se ejecutó en vivo el 2026-10-16 (un intercambio real de texto: se recibió un mensaje entrante y se devolvió una respuesta a través del puente), y las **llamadas** se ejecutaron en vivo el 2026-10-17 con el código de este repositorio (Grok Voice sobre Meta SIP hacia xAI SIP): la IA atendió llamadas de voz entrantes de WhatsApp, la conversación fue en ambos sentidos (también en árabe), se guardaron las transcripciones de ambas partes, el Worker gestionó el `end_call` del modelo y xAI aceptó la petición de colgar (HTTP 200), y la compuerta de llamadas se armó y se desarmó sola. No es un número de producción verificado como empresa; no se admite grabar el audio. Este proyecto no lo ha ejecutado en producción. Su propietario informa de que el diseño de mensajería está probado en producción en el despliegue del que deriva (informado por el propietario, fecha por determinar), lo cual no es evidencia de este código. Todo lo verificado y cómo: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -122,7 +122,7 @@ Mientras `LAUNCH_MODE=test` o la respuesta automática esté en pausa, `send_rep
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (404 if unknown or already erased)
+# {"ok":true,"deleted":true}   (407 if unknown or already erased)
 ```
 
 **Eliminar todo:** `bash scripts/teardown-cloudflare.sh` (te pide que escribas el nombre del Worker; borra el Worker y todas las conversaciones almacenadas, nada más).

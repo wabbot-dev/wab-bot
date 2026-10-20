@@ -30,7 +30,7 @@
 > 本專案為獨立專案：與 Meta 或 xAI 無關聯，也未獲其認可。WhatsApp 與 Grok 為其各自所有者的商標。
 
 > [!NOTE]
-> **預覽版。** 已在本機針對模擬物件測試（404 項自動化測試）。早期版本曾在一次性的 Cloudflare Free 帳號上實際執行。在 Meta 免費**測試**號碼上的實測證據：**文字訊息**於 2026-10-16 實測執行（一次真實的文字往返：收到一則入站訊息，並透過橋接送回了回覆）；**語音通話**於 2026-10-17 使用本儲存庫的程式碼實測執行（Grok Voice 經 Meta SIP 連接 xAI SIP）：WhatsApp 語音來電由 AI 接聽，雙向交談（包括阿拉伯語），雙方的逐字稿均已儲存，Worker 處理了模型的 `end_call`，xAI 接受了掛斷請求（HTTP 200），通話開關完成啟用並自動關閉。這不是經商業驗證的正式環境號碼；不支援音訊錄製。本專案未在正式環境中執行過。訊息部分的設計據其所有者表示已在其衍生來源的部署中經正式環境驗證（所有者自述，日期待定），這並不構成對本程式碼的證據。已驗證的全部內容與驗證方式：[docs/STATUS.md](../STATUS.md)。
+> **預覽版。** 已在本機針對模擬物件測試（407 項自動化測試）。早期版本曾在一次性的 Cloudflare Free 帳號上實際執行。在 Meta 免費**測試**號碼上的實測證據：**文字訊息**於 2026-10-16 實測執行（一次真實的文字往返：收到一則入站訊息，並透過橋接送回了回覆）；**語音通話**於 2026-10-17 使用本儲存庫的程式碼實測執行（Grok Voice 經 Meta SIP 連接 xAI SIP）：WhatsApp 語音來電由 AI 接聽，雙向交談（包括阿拉伯語），雙方的逐字稿均已儲存，Worker 處理了模型的 `end_call`，xAI 接受了掛斷請求（HTTP 200），通話開關完成啟用並自動關閉。這不是經商業驗證的正式環境號碼；不支援音訊錄製。本專案未在正式環境中執行過。訊息部分的設計據其所有者表示已在其衍生來源的部署中經正式環境驗證（所有者自述，日期待定），這並不構成對本程式碼的證據。已驗證的全部內容與驗證方式：[docs/STATUS.md](../STATUS.md)。
 
 ---
 
@@ -122,7 +122,7 @@ call finish_conversation '{"conversation_id":"c_<id>","lease":"<lease>"}'
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (404 if unknown or already erased)
+# {"ok":true,"deleted":true}   (407 if unknown or already erased)
 ```
 
 **移除全部內容：**`bash scripts/teardown-cloudflare.sh`（會要求你輸入 Worker 名稱；刪除該 Worker 和所有已儲存的對話，不會刪除其他任何東西）。

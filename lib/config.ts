@@ -270,7 +270,7 @@ export function loadConfig(env: Env): Config {
       return l.length ? l.slice(0, 5) : ["auto"];
     })(),
     identityCheck: (["none", "known_number", "details"] as const).find((m) => m === env.IDENTITY_CHECK?.trim().toLowerCase()) ?? "none",
-    customerDetails: list(env.CUSTOMER_DETAILS).map((x) => x.toLowerCase().replace(/[^a-z0-9_ ]/g, "").trim()).filter(Boolean).slice(0, 10),
+    customerDetails: list(env.CUSTOMER_DETAILS).map((x) => x.toLowerCase().replace(/[^a-z0-9_ ]/g, "").trim()).filter((x) => x && x !== "none").slice(0, 10),
     bookingWebhookUrl: /^https:\/\/[^\s]{4,500}$/.test(env.BOOKING_WEBHOOK_URL?.trim() ?? "") ? env.BOOKING_WEBHOOK_URL!.trim() : undefined,
     bookingWebhookKey: env.BOOKING_WEBHOOK_KEY?.trim() || undefined,
     paymentCheck: env.PAYMENT_CHECK?.trim().toLowerCase() === "staff" ? "staff" : "off",

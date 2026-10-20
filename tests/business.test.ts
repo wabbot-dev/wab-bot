@@ -123,6 +123,10 @@ test("booking/order hook: one POST with the details and an Idempotency-Key; repl
   assert.ok(!JSON.stringify(fh.filter((x) => x.url === ALERT)).includes("table for 4"), "the alert carries no request content");
 });
 
+test("CUSTOMER_DETAILS=none means no fields", () => {
+  assert.deepEqual(makeHarness({ CUSTOMER_DETAILS: "none" }).ctx.cfg.customerDetails, []);
+});
+
 test("CALL_SIP_TARGET: xai by default; a public SIP host[:port] selects another voice agent; anything else falls back to xai", () => {
   assert.deepEqual(sipTargetOf(undefined), { kind: "xai" });
   assert.deepEqual(sipTargetOf("xai"), { kind: "xai" });

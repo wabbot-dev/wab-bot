@@ -30,7 +30,7 @@
 > Ten projekt jest niezależny: nie jest powiązany z Meta ani xAI ani przez nie zatwierdzony. WhatsApp i Grok są znakami towarowymi ich właścicieli.
 
 > [!NOTE]
-> **Wersja zapoznawcza.** Przetestowano lokalnie na atrapach (404 testów automatycznych). Wcześniejsze rewizje działały na żywo na jednorazowym koncie Cloudflare Free. Dowody na żywo na bezpłatnym numerze **testowym** Meta: **wiadomości tekstowe** uruchomiono na żywo 2026-10-16 (prawdziwa wymiana tekstu: odebrano wiadomość przychodzącą i odpowiedź wyszła przez most), a **połączenia** 2026-10-17 z kodem z tego repozytorium (Grok Voice przez Meta SIP do xAI SIP): przychodzące połączenia głosowe WhatsApp odbierała sztuczna inteligencja, rozmowa toczyła się w obie strony (także po arabsku), zapisano transkrypcje obu stron, `end_call` modelu obsłużył Worker, a prośba o rozłączenie do xAI została przyjęta (HTTP 200), bramka połączeń uzbroiła się i sama rozbroiła. To nie jest numer produkcyjny zweryfikowany jako firma; nagrywanie dźwięku nie jest obsługiwane. Ten projekt nie uruchamiał go w produkcji. Właściciel zgłasza, że projekt obsługi wiadomości sprawdził się w produkcji we wdrożeniu, z którego pochodzi (zgłoszenie właściciela, data do ustalenia), co nie jest dowodem dla tego kodu. Wszystko, co zweryfikowano, i jak: [docs/STATUS.md](../STATUS.md).
+> **Wersja zapoznawcza.** Przetestowano lokalnie na atrapach (407 testów automatycznych). Wcześniejsze rewizje działały na żywo na jednorazowym koncie Cloudflare Free. Dowody na żywo na bezpłatnym numerze **testowym** Meta: **wiadomości tekstowe** uruchomiono na żywo 2026-10-16 (prawdziwa wymiana tekstu: odebrano wiadomość przychodzącą i odpowiedź wyszła przez most), a **połączenia** 2026-10-17 z kodem z tego repozytorium (Grok Voice przez Meta SIP do xAI SIP): przychodzące połączenia głosowe WhatsApp odbierała sztuczna inteligencja, rozmowa toczyła się w obie strony (także po arabsku), zapisano transkrypcje obu stron, `end_call` modelu obsłużył Worker, a prośba o rozłączenie do xAI została przyjęta (HTTP 200), bramka połączeń uzbroiła się i sama rozbroiła. To nie jest numer produkcyjny zweryfikowany jako firma; nagrywanie dźwięku nie jest obsługiwane. Ten projekt nie uruchamiał go w produkcji. Właściciel zgłasza, że projekt obsługi wiadomości sprawdził się w produkcji we wdrożeniu, z którego pochodzi (zgłoszenie właściciela, data do ustalenia), co nie jest dowodem dla tego kodu. Wszystko, co zweryfikowano, i jak: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -122,7 +122,7 @@ Gdy `LAUNCH_MODE=test` lub automatyczna odpowiedź jest wstrzymana, `send_reply`
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (404 if unknown or already erased)
+# {"ok":true,"deleted":true}   (407 if unknown or already erased)
 ```
 
 **Usunięcie wszystkiego:** `bash scripts/teardown-cloudflare.sh` (prosi o wpisanie nazwy Workera; usuwa Workera i wszystkie zapisane rozmowy, nic więcej).

@@ -30,7 +30,7 @@
 > Questo progetto è indipendente: non è affiliato a Meta o xAI né da loro approvato. WhatsApp e Grok sono marchi dei rispettivi proprietari.
 
 > [!NOTE]
-> **Anteprima.** Testato in locale contro finti (fake) (404 test automatici). Le revisioni precedenti sono girate dal vivo su un account Cloudflare Free usa e getta. Prove dal vivo sul numero di **test** gratuito di Meta: l'**invio di testi** è stato eseguito dal vivo il 2026-10-16 (un vero andata e ritorno di testo: un messaggio in arrivo è stato ricevuto e una risposta è tornata attraverso il bridge), e le **chiamate** il 2026-10-17 con il codice di questo repository (Grok Voice su Meta SIP verso xAI SIP): le chiamate vocali WhatsApp in arrivo sono state risposte dall'IA, la conversazione è andata nei due sensi (anche in arabo), le trascrizioni di entrambe le parti sono state salvate, il `end_call` del modello è stato gestito dal Worker e la richiesta di riagganciare a xAI è stata accettata (HTTP 200), e il cancello delle chiamate si è armato e disarmato da solo. Non è un numero di produzione verificato come azienda; la registrazione audio non è supportata. Non eseguito da questo progetto in produzione. Il proprietario segnala che il progetto della messaggistica è provato in produzione nel deployment da cui deriva (segnalazione del proprietario, data da definire), il che non è una prova per questo codice. Tutto ciò che è verificato e come: [docs/STATUS.md](../STATUS.md).
+> **Anteprima.** Testato in locale contro finti (fake) (407 test automatici). Le revisioni precedenti sono girate dal vivo su un account Cloudflare Free usa e getta. Prove dal vivo sul numero di **test** gratuito di Meta: l'**invio di testi** è stato eseguito dal vivo il 2026-10-16 (un vero andata e ritorno di testo: un messaggio in arrivo è stato ricevuto e una risposta è tornata attraverso il bridge), e le **chiamate** il 2026-10-17 con il codice di questo repository (Grok Voice su Meta SIP verso xAI SIP): le chiamate vocali WhatsApp in arrivo sono state risposte dall'IA, la conversazione è andata nei due sensi (anche in arabo), le trascrizioni di entrambe le parti sono state salvate, il `end_call` del modello è stato gestito dal Worker e la richiesta di riagganciare a xAI è stata accettata (HTTP 200), e il cancello delle chiamate si è armato e disarmato da solo. Non è un numero di produzione verificato come azienda; la registrazione audio non è supportata. Non eseguito da questo progetto in produzione. Il proprietario segnala che il progetto della messaggistica è provato in produzione nel deployment da cui deriva (segnalazione del proprietario, data da definire), il che non è una prova per questo codice. Tutto ciò che è verificato e come: [docs/STATUS.md](../STATUS.md).
 
 ---
 
@@ -122,7 +122,7 @@ Finché `LAUNCH_MODE=test` è attivo o la risposta automatica è in pausa, `send
 
 ```bash
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-subdomain>.workers.dev/api/admin/conversations/c_<id>
-# {"ok":true,"deleted":true}   (404 if unknown or already erased)
+# {"ok":true,"deleted":true}   (407 if unknown or already erased)
 ```
 
 **Rimuovere tutto:** `bash scripts/teardown-cloudflare.sh` (ti chiede di digitare il nome del Worker; elimina il Worker e ogni conversazione memorizzata, nient'altro).
