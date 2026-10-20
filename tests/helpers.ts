@@ -42,6 +42,8 @@ export class FakeNet {
   graphMissingWamid = false;
   wakeStatus = 200;
   wakeThrows = false;
+  /** scripted Graph answers, used first in order (then graphStatus applies): e.g. a 429 or a Meta rate-limit error code */
+  graphScript: { status: number; code?: number }[] = [];
   private n = 0;
   fetch: typeof fetch;
   constructor() {
@@ -53,6 +55,8 @@ export class FakeNet {
       this.calls.push({ url, method: init?.method ?? "GET", headers, body });
       if (url.startsWith("https://graph.facebook.com/")) {
         if (this.graphThrows) throw new Error("network down");
+        const sc = this.graphScript.shift();
+        if (sc && (sc.status < 200 || sc.status >= 300)) return Response.json({ error: { code: sc.code ?? 100, message: "x" } }, { status: sc.status });
         if (this.graphStatus >= 200 && this.graphStatus < 300) {
           return Response.json(this.graphMissingWamid ? {} : { messages: [{ id: `wamid.OUT${++this.n}` }] }, { status: this.graphStatus });
         }
@@ -81,6 +85,11 @@ export function baseEnv(over: Env = {}): Env {
     MCP_TOKEN,
     ADMIN_TOKEN,
     CRON_SECRET,
+    // the suite was written against these; the shipped defaults (3 s debounce, read receipts and typing on) are tested on their own
+    WAKE_DEBOUNCE_MS: "8000",
+    READ_RECEIPTS: "0",
+    TYPING_INDICATOR: "0",
+    SEND_RETRY_BASE_MS: "0",
     ...over,
   };
 }

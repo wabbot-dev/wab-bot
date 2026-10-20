@@ -56,8 +56,10 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 | `GRAPH_VERSION` | default `v25.0` |
 | `LAUNCH_MODE`, `TEST_RECIPIENTS` | `live` or test (default test); numbers allowed in test mode |
 | `WAKE_URL` (**https only**, `http://localhost` for dev), `WAKE_KEY`, `WAKE_HEADER`, `WAKE_AUTH` (`bearer`/`header`) | where the content-free wake goes |
-| `WAKE_DEBOUNCE_MS` (0-25000, default 8000), `WAKE_TYPES` | wake timing and which inbound types wake |
-| `LEASE_MS`, `RATE_CONV_MAX`, `RATE_CONV_WINDOW_MS`, `RATE_GLOBAL_PER_HOUR`, `SEND_TIMEOUT_MS`, `MAX_MESSAGES`, `STALE_WAKE_MS` | tuning (defaults in `lib/config.ts`) |
+| `WAKE_DEBOUNCE_MS` (0-25000, default 3000), `WAKE_TYPES` | wake timing (the reply delay after the first message of a burst) and which inbound types wake |
+| `LEASE_MS`, `RATE_CONV_MAX` (default 8), `RATE_CONV_WINDOW_MS` (default 10 min), `RATE_GLOBAL_PER_HOUR` (default 300), `SEND_TIMEOUT_MS`, `MAX_MESSAGES`, `STALE_WAKE_MS` | tuning (defaults in `lib/config.ts`). The bridge's own limits sit well below Meta's (80 messages per second per number; about one message every 6 s to the same user) |
+| `SEND_RETRIES` (0-4, default 2), `SEND_RETRY_BASE_MS` (default 1000) | after a rate-limited send (HTTP 429 or Meta codes 4, 80007, 130429, 131056) the bridge waits 1 s, then 3 s, and tries again; still limited = `send_rate_limited` (nothing sent, `retryable: true`), never held for review |
+| `READ_RECEIPTS`, `TYPING_INDICATOR` (default on) | when the agent claims a conversation it may answer (live mode, or an allowlisted test recipient), the customer's latest message gets blue ticks and "typing..." (Meta removes it when the reply arrives or after 25 s). `0` turns either off |
 | `SETUP_NONCE` (plain-text var, not a secret) | one-time key for `POST /api/setup`; >= 32 chars; unset or short = setup disabled |
 | `META_SETUP_ENABLED`, `META_SETUP_DRY_RUN` | meta-setup route gate (default off) and its offline stub |
 | `MEDIA_TRANSCRIBE`, `MEDIA_DESCRIBE` (default **on**; `0`/`false`/`no`/`off` = off) | transcribe inbound voice notes / describe inbound images with Workers AI (the `AI` binding in `wrangler.toml`); off = type and caption only, as before ([MEDIA.md](MEDIA.md)) |

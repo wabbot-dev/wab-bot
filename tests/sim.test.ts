@@ -315,7 +315,7 @@ test("24h window: text blocked, only an allowlisted template goes out", async ()
 });
 
 test("per-conversation (5 / 10 min) and global rate limits", async () => {
-  const h = makeHarness({ RATE_GLOBAL_PER_HOUR: "7", LEASE_MS: "3600000" });
+  const h = makeHarness({ RATE_GLOBAL_PER_HOUR: "7", RATE_CONV_MAX: "5", LEASE_MS: "3600000" });
   await activate(h);
   await post(h, inboundPayload({ wamid: "wamid.Q1" }));
   await post(h, inboundPayload({ wamid: "wamid.Q2", from: WA2 }));

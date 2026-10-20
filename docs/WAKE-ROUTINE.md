@@ -1,6 +1,6 @@
 # Waking your agent: the webhook routine (`WAKE_URL` / `WAKE_KEY`)
 
-The bridge never talks to your agent directly. When a customer message arrives it sends ONE content-free POST (debounced, default 8 s):
+The bridge never talks to your agent directly. When a customer message arrives it sends ONE content-free POST (debounced, default 3 s):
 
 ```json
 {"event":"whatsapp_conversation_pending","conversation_id":"…","pending_messages":2,"wake_at":"2026-10-15T18:00:00.000Z",

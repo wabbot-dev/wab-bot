@@ -28,6 +28,10 @@ export interface Env {
   ELEVENLABS_MAX_CHARS?: string;
   VOICE_STYLE_TAG?: string;
   MEDIA_READ_DOCUMENTS?: string;
+  SEND_RETRIES?: string;
+  SEND_RETRY_BASE_MS?: string;
+  READ_RECEIPTS?: string;
+  TYPING_INDICATOR?: string;
   MEDIA_MAX_DOC_BYTES?: string;
   MEDIA_MAX_DOC_CHARS?: string;
   VOICE_PRONUNCIATIONS?: string;

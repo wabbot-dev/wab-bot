@@ -47,6 +47,13 @@ export interface Config {
   rateConvWindowMs: number;
   rateGlobalPerHour: number;
   sendTimeoutMs: number;
+  /** SEND_RETRIES (default 2, 0..4): extra attempts after a rate-limited send; SEND_RETRY_BASE_MS (default 1000) the first pause (x3 each time) */
+  sendRetries: number;
+  sendRetryBaseMs: number;
+  /** READ_RECEIPTS / TYPING_INDICATOR (default on): when the agent claims a conversation it may answer, mark the customer's message read
+   *  and show "typing..." (Meta dismisses it when the reply arrives or after 25 s) */
+  readReceipts: boolean;
+  typingIndicator: boolean;
   maxMessages: number;
   staleWakeMs: number;
   mcpToken?: string;
@@ -204,13 +211,17 @@ export function loadConfig(env: Env): Config {
     wakeKey: env.WAKE_KEY || undefined,
     wakeHeader: env.WAKE_HEADER?.trim() || undefined,
     wakeAuth: env.WAKE_AUTH?.trim().toLowerCase() === "header" ? "header" : "bearer",
-    wakeDebounceMs: intIn(env.WAKE_DEBOUNCE_MS, 8000, 0, 25000),
+    wakeDebounceMs: intIn(env.WAKE_DEBOUNCE_MS, 3000, 0, 25000),
     wakeTypes: wakeTypes.length ? wakeTypes : DEFAULT_WAKE_TYPES,
     leaseMs: intIn(env.LEASE_MS, 300000, 1000, 3600000),
-    rateConvMax: intIn(env.RATE_CONV_MAX, 5, 1, 1000),
+    rateConvMax: intIn(env.RATE_CONV_MAX, 8, 1, 1000),
     rateConvWindowMs: intIn(env.RATE_CONV_WINDOW_MS, 600000, 1000, 86400000),
-    rateGlobalPerHour: intIn(env.RATE_GLOBAL_PER_HOUR, 60, 1, 100000),
+    rateGlobalPerHour: intIn(env.RATE_GLOBAL_PER_HOUR, 300, 1, 100000),
     sendTimeoutMs: intIn(env.SEND_TIMEOUT_MS, 15000, 1000, 55000),
+    sendRetries: intIn(env.SEND_RETRIES, 2, 0, 4),
+    sendRetryBaseMs: intIn(env.SEND_RETRY_BASE_MS, 1000, 0, 10000),
+    readReceipts: !/^(0|false|no|off)$/i.test(env.READ_RECEIPTS?.trim() ?? ""),
+    typingIndicator: !/^(0|false|no|off)$/i.test(env.TYPING_INDICATOR?.trim() ?? ""),
     maxMessages: intIn(env.MAX_MESSAGES, 50, 20, 200),
     staleWakeMs: intIn(env.STALE_WAKE_MS, 300000, 60000, 86400000),
     mcpToken: env.MCP_TOKEN || undefined,

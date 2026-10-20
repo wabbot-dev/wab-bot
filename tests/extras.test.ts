@@ -48,10 +48,11 @@ test("defaults are fail-safe: LAUNCH_MODE test, auto-reply paused, safe limits",
   assert.equal(cfg.launchMode, "test");
   assert.equal(loadConfig({ LAUNCH_MODE: "LIVE " }).launchMode, "live");
   assert.equal(loadConfig({ LAUNCH_MODE: "production" }).launchMode, "test");
-  assert.equal(cfg.wakeDebounceMs, 8000);
+  assert.equal(cfg.wakeDebounceMs, 3000, "a shorter default reply delay (was 8 s)");
   assert.equal(loadConfig({ WAKE_DEBOUNCE_MS: "999999" }).wakeDebounceMs, 25000);
   assert.equal(loadConfig({ WAKE_DEBOUNCE_MS: "-5" }).wakeDebounceMs, 0);
-  assert.deepEqual([cfg.leaseMs, cfg.rateConvMax, cfg.rateConvWindowMs, cfg.rateGlobalPerHour, cfg.sendTimeoutMs], [300000, 5, 600000, 60, 15000]);
+  assert.deepEqual([cfg.leaseMs, cfg.rateConvMax, cfg.rateConvWindowMs, cfg.rateGlobalPerHour, cfg.sendTimeoutMs], [300000, 8, 600000, 300, 15000]);
+  assert.deepEqual([cfg.sendRetries, cfg.sendRetryBaseMs, cfg.readReceipts, cfg.typingIndicator], [2, 1000, true, true]);
   assert.deepEqual(cfg.templateAllowlist, []);
   const h = makeHarness({ LAUNCH_MODE: undefined });
   const ov: any = await (await adminGet(h.ctx, adminReq("GET"))).json();

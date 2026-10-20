@@ -52,6 +52,7 @@ export async function listPending(ctx: Ctx): Promise<Json[]> {
 // ---------------------------------------------------------------- claim
 export async function claimConversation(ctx: Ctx, id: string): Promise<Json> {
   if (!CONV_ID_RE.test(id)) return { ok: false, error: "not_found" };
+  let seen: { pn: string; wamid: string } | null = null;
   const r = await update<Conv, Json>(ctx, convKeyOf(id), (c) => {
     if (!c) return { next: undefined, result: { ok: false, error: "not_found" } };
     const now = ctx.now();
@@ -65,13 +66,37 @@ export async function claimConversation(ctx: Ctx, id: string): Promise<Json> {
     c.seenSeq = 0;
     settleWakeOnClaim(c, now); // records the (unwritten) successful wake in this same put
     c.updatedAt = now;
+    const lastIn = [...c.messages].reverse().find((m) => m.dir === "in" && typeof m.id === "string" && m.id.startsWith("wamid."));
+    if (lastIn && !c.optOut && (ctx.cfg.launchMode === "live" || ctx.cfg.testRecipients.includes(c.wa_id))) seen = { pn: c.phone_number_id, wamid: lastIn.id };
     return {
       next: c,
       result: { ok: true, conversation_id: c.id, lease: c.lease, lease_expires_at: iso(c.leaseExpiry) },
     };
   });
   ctx.log("claim", { conv: id, ok: r.result.ok === true });
+  const s = seen as { pn: string; wamid: string } | null;
+  if (r.result.ok === true && s && ctx.cfg.waAccessToken && (ctx.cfg.readReceipts || ctx.cfg.typingIndicator)) ctx.schedule(() => markReadTyping(ctx, s.pn, s.wamid), "maintenance");
   return r.result;
+}
+
+/**
+ * Blue ticks + "typing..." for the customer's latest message, sent when the agent claims a conversation it may answer (live mode, or a
+ * test-mode allowlisted recipient; never to someone the bot will not answer). One POST; Meta dismisses the indicator when the reply is
+ * delivered or after 25 s. Best effort: a failure is logged as a status code and changes nothing.
+ * https://developers.facebook.com/docs/whatsapp/cloud-api/typing-indicators
+ */
+export async function markReadTyping(ctx: Ctx, pn: string, wamid: string): Promise<void> {
+  const body: Json = { messaging_product: "whatsapp", status: "read", message_id: wamid };
+  if (ctx.cfg.typingIndicator) body.typing_indicator = { type: "text" };
+  try {
+    const res = await fetchTimeout(ctx, `https://graph.facebook.com/${ctx.cfg.graphVersion}/${pn}/messages`, {
+      method: "POST", headers: { Authorization: `Bearer ${ctx.cfg.waAccessToken}`, "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }, 5000);
+    await res.body?.cancel().catch(() => {});
+    ctx.log("read_typing", { http: res.status, typing: ctx.cfg.typingIndicator });
+  } catch {
+    ctx.log("read_typing", { http: 0 });
+  }
 }
 
 // ---------------------------------------------------------------- get_history
@@ -203,6 +228,9 @@ function reserveSlots(ctx: Ctx, c: Conv, h: HourCounter | null, replyKey: string
  * recorded on the reserved record: sent, failed (definitive 4xx) or uncertain (timeout, 5xx, 408/429, no message id), and an
  * uncertain send holds the conversation for review. Recipient and sender come from the server-side record only.
  */
+/** Meta rate-limit error codes (developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes): the message was not accepted. */
+export const RATE_LIMIT_CODES = new Set([4, 80007, 130429, 131056]);
+
 export async function deliver(ctx: Ctx, d: { id: string; replyKey: string; to: string; pn: string; content: Content; origin: OutRec["origin"] }): Promise<Json> {
   const { cfg } = ctx;
   const { id, replyKey, content } = d;
@@ -231,31 +259,41 @@ export async function deliver(ctx: Ctx, d: { id: string; replyKey: string; to: s
   }
   type Outcome =
     | { kind: "sent"; wamid: string }
-    | { kind: "failed"; status: number; code?: number }
+    | { kind: "failed"; status: number; code?: number; rateLimited?: boolean }
     | { kind: "uncertain" };
-  let outcome: Outcome;
-  try {
-    const res = await fetchTimeout(
-      ctx,
-      `https://graph.facebook.com/${cfg.graphVersion}/${d.pn}/messages`,
-      {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.waAccessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      },
-      cfg.sendTimeoutMs,
-    );
-    const j = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { code?: number } };
-    if (res.status >= 200 && res.status < 300) {
-      const wamid = j.messages?.[0]?.id;
-      outcome = wamid ? { kind: "sent", wamid } : { kind: "uncertain" };
-    } else if (res.status >= 400 && res.status < 500 && res.status !== 408 && res.status !== 429) {
-      outcome = { kind: "failed", status: res.status, code: j.error?.code };
-    } else {
+  let outcome: Outcome = { kind: "uncertain" };
+  // A rate-limit answer (HTTP 429, or Meta's throughput / pair-rate / app-rate codes) means Meta did NOT accept the message, so it is
+  // safe to try again: SEND_RETRIES more times with a growing pause (SEND_RETRY_BASE_MS, x3 each time). Still limited = failed (not sent).
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetchTimeout(
+        ctx,
+        `https://graph.facebook.com/${cfg.graphVersion}/${d.pn}/messages`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${cfg.waAccessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        },
+        cfg.sendTimeoutMs,
+      );
+      const j = (await res.json().catch(() => ({}))) as { messages?: { id?: string }[]; error?: { code?: number } };
+      const code = j.error?.code;
+      if (res.status >= 200 && res.status < 300) {
+        const wamid = j.messages?.[0]?.id;
+        outcome = wamid ? { kind: "sent", wamid } : { kind: "uncertain" };
+      } else if (res.status === 429 || (res.status >= 400 && res.status < 500 && code !== undefined && RATE_LIMIT_CODES.has(code))) {
+        outcome = { kind: "failed", status: res.status, code, rateLimited: true };
+      } else if (res.status >= 400 && res.status < 500 && res.status !== 408) {
+        outcome = { kind: "failed", status: res.status, code };
+      } else {
+        outcome = { kind: "uncertain" };
+      }
+    } catch {
       outcome = { kind: "uncertain" };
     }
-  } catch {
-    outcome = { kind: "uncertain" };
+    if (!(outcome.kind === "failed" && outcome.rateLimited) || attempt >= cfg.sendRetries) break;
+    ctx.log("send_rate_limited_retry", { conv: id, attempt: attempt + 1, code: outcome.code ?? null });
+    await ctx.sleep(cfg.sendRetryBaseMs * 3 ** attempt);
   }
   ctx.log("send", { conv: id, key: replyKey, origin: d.origin ?? "reply", outcome: outcome.kind, http: outcome.kind === "failed" ? outcome.status : undefined });
 
@@ -273,7 +311,7 @@ export async function deliver(ctx: Ctx, d: { id: string; replyKey: string; to: s
         if (m) { m.id = outcome.wamid; m.status = "sent"; }
       } else if (outcome.kind === "failed") {
         o.status = "failed";
-        o.error = `send_rejected_http_${outcome.status}`;
+        o.error = outcome.rateLimited ? "send_rate_limited" : `send_rejected_http_${outcome.status}`;
         o.metaErrorCode = outcome.code;
         if (m) m.status = "failed";
       } else {
@@ -301,6 +339,9 @@ export async function deliver(ctx: Ctx, d: { id: string; replyKey: string; to: s
     return { ok: true, status: "sent", reply_key: replyKey };
   }
   if (outcome.kind === "failed") {
+    if (outcome.rateLimited) {
+      return { ok: false, error: "send_rate_limited", retryable: true, hint: "Meta's rate limit: nothing was sent. Try again in a minute with a NEW idempotency key.", ...(outcome.code !== undefined ? { meta_error_code: outcome.code } : {}) };
+    }
     return {
       ok: false,
       error: `send_rejected_http_${outcome.status}`,
