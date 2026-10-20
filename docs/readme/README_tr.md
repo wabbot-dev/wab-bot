@@ -147,7 +147,7 @@ curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-su
 
 - **Bağımsız proje.** WAB bot resmî değildir: Meta, WhatsApp veya xAI ile bağlantılı değildir ve onlar tarafından onaylanmamıştır. WhatsApp ve Grok, sahiplerinin ticari markalarıdır.
 - **Meta'nın kuralları geçerlidir.** WhatsApp Cloud API kullanımınız Meta'nın şartlarına, mesajlaşma politikalarına ve numara başına kurallara tabidir; bir işletme numarasında arama için Meta İşletme Doğrulaması gerekir.
-- **Bot başına bir numara.** Bir dağıtım bir işletmeye ve bir WhatsApp numarasına hizmet eder; kendi Meta uygulamanız, belirteçleriniz ve Cloudflare hesabınız kullanılır.
+- **Bot başına bir numara.** Bir dağıtım bir işletmeye ve bir WhatsApp numarasına hizmet eder; kendi Meta uygulamanız, belirteçleriniz ve Cloudflare hesabınız kullanılır. Yeni bir botu bağladığınız Meta uygulaması zaten başka bir bota hizmet veriyorsa, kurulum hiçbir şeyi değiştirmez ve aynı işletme portföyünde yeni bir Meta uygulaması oluşturmanızı ister.
 - **Aramayı siz açarsınız.** Varsayılan olarak kapalıdır; numarayı belirterek siz açarsınız ve aramalar kendi xAI kredinizi kullanır (dakikası yaklaşık $0.08).
 - **Yalnızca gelen aramalar, ses kaydı yok.** Giden aramalar ve ses kaydı desteklenmez. Metin dökümü varsayılan olarak saklanır ve kapatabilirsiniz.
 - **Numara başına SIP ve Graph arama API'si birbirini dışlar.** Bir numara arama için SIP kullanırken (bu bot gibi), o numarada Meta'nın Graph arama uç noktaları kullanılamaz.

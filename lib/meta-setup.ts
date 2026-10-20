@@ -14,7 +14,7 @@
 import { createHash, createHmac, randomInt } from "node:crypto";
 import { adminAuthorized } from "./admin";
 import type { Ctx, VolatileState } from "./ctx";
-import { FakeMeta, DRY_RUN_TOKEN } from "./meta-fake";
+import { FakeMeta, DRY_RUN_TOKEN, DRY_RUN_TOKEN_APP_IN_USE } from "./meta-fake";
 import { Redactor } from "./redact";
 import { handleVerify } from "./webhook";
 
@@ -61,7 +61,11 @@ export interface Req {
   newDisplayName?: string;
   testTo?: string; testTemplate: string; testLanguage: string; confirm: boolean;
   webhookUrl?: string; webhookFields: string[]; wabaOverride: boolean;
-  /** where the callback goes: auto (default: app level only when it is free or already ours, else a per-number override), app, waba, phone */
+  /**
+   * where the callback goes: auto (default: app level when the app is free or already ours; when the app already serves ANOTHER
+   * bot, nothing changes and the result says new_app_required: one bot per Meta app), app, waba, or phone (the explicit per-number
+   * override: the fallback for one bot answering several numbers on a shared app, never chosen automatically)
+   */
   webhookScope: "auto" | "app" | "waba" | "phone";
   /** explicit confirmation to replace a callback that points to ANOTHER deployment (never the default) */
   replaceWebhook: boolean;
@@ -249,6 +253,7 @@ function guardHit(ctx: Ctx, key: string, max: number, windowMs: number): boolean
 // ------------------------------------------------------------------------------------------------------------------------------
 // the engine
 // ------------------------------------------------------------------------------------------------------------------------------
+const N_WEBHOOK = "Webhook callback + verify token (never silently replaces another deployment's)";
 export class Setup {
   results: StepResult[] = [];
   ids: { app_id: string | null; user_id: string | null; business_id: string | null; waba_id: string | null; system_user_id: string | null; phone_number_id: string | null };
@@ -261,6 +266,8 @@ export class Setup {
   toStore?: string;
   manual: Record<string, unknown> | null = null;
   next: string[] = [];
+  /** set when the target Meta app already serves another bot: the default is a NEW Meta app for this bot (one bot per app) */
+  newApp: Record<string, unknown> | null = null;
 
   constructor(public ctx: Ctx, public q: Req, public g: Graph, public r: Redactor) {
     this.ids = { app_id: q.appId ?? null, user_id: null, business_id: q.businessId ?? null, waba_id: q.wabaId ?? null, system_user_id: q.systemUserId ?? null, phone_number_id: q.phoneId ?? null };
@@ -619,10 +626,10 @@ export class Setup {
       callback_url: url, verify_token: verify, subscribe_to_fields: q.webhookFields,
       note: "the verify token is only a handshake string (not the app secret); enter both values exactly, press Verify and save",
     };
-    const S = "webhook", N = "Webhook callback + verify token (never silently replaces another deployment's)";
+    const S = "webhook", N = N_WEBHOOK;
     const app = this.ids.app_id, secret = this.appSecret, waba = this.ids.waba_id, pn = this.ids.phone_number_id;
     const manual = (why: string) => {
-      this.manual = { ...dashboard, warning: "if this app's callback already points to ANOTHER bot, do not replace it there: re-run with webhook_scope \"phone\" so only this number is routed here" };
+      this.manual = { ...dashboard, warning: "if this app's callback already points to ANOTHER bot, do not replace it there: create a NEW Meta app for this bot (one bot per Meta app); a per-number override (webhook_scope \"phone\") only when one bot should answer several numbers on that app" };
       this.add(S, N, "WARN", `${why}. Enter the dashboard values returned under "manual".`, { mode: "manual_needed", callback_url: url });
     };
     const host = (u: string) => { try { return new URL(u).host; } catch { return "(unreadable)"; } };
@@ -685,7 +692,7 @@ export class Setup {
       if (!a0.ok) { manual(appTok ? `app secret rejected or edge unavailable (${a0.error})` : "no app secret (send app_secret in the body, or set WA_APP_SECRET and redeploy)"); return; }
       if (a0.match) { this.add(S, N, "PASS", "already set (skipped)", { mode: "app", callback_url: url, fields: a0.fields, changed: false }); return; }
       if (a0.current && !mine(a0.current) && !q.replaceWebhook) {
-        refuse("app-level", a0.current, "Every number on this Meta app would move here. Re-run with webhook_scope \"phone\" (recommended for a second bot), or replace_webhook:true only if that deployment is retired."); return;
+        refuse("app-level", a0.current, "Every number on this Meta app would move here. Create a NEW Meta app for this bot (one bot per Meta app; the default), or webhook_scope \"phone\" only for one bot answering several numbers, or replace_webhook:true only if that deployment is retired."); return;
       }
       const p = await this.g.call("POST", `/${app}/subscriptions`, { appToken: appTok!, form: { object: "whatsapp_business_account", callback_url: url, verify_token: verify, fields: q.webhookFields.join(","), include_values: "true" } });
       const a = await readApp();
@@ -698,18 +705,67 @@ export class Setup {
     else if (scope === "waba") await setWaba();
     else if (scope === "app") await setApp();
     else {
-      // auto: a fresh app gets the app-level callback; an app already serving ANOTHER bot is left alone and only this number is routed here
+      // auto: a fresh app gets the app-level callback; an app already serving ANOTHER bot is left alone and the answer is
+      // new_app_required (one bot per Meta app). The per-number override is only taken when asked for (webhook_scope "phone"),
+      // or when this number was already routed here on purpose (a re-run of that fallback).
       const other = appNow && !mine(appNow) ? appNow : null;
       const numberElsewhere = before?.phone && !mine(before.phone) ? before.phone : before?.waba && !mine(before.waba) ? before.waba : null;
       if (numberElsewhere && !q.replaceWebhook) refuse(before?.phone && !mine(before.phone) ? "number-level" : "WABA-level", numberElsewhere, "This number is served by another deployment. Re-run with replace_webhook:true only if that deployment is retired.");
-      else if (other && pn) { this.add("webhook_app_level", "App-level callback belongs to another deployment", "WARN", `left unchanged (${host(other)}); routing only this number here with a per-number override`, { app_level_host: host(other) }); await setPhone(); }
-      else if (other) refuse("app-level", other, "Send phone_number_id so only this number is routed here (webhook_scope \"phone\"), or replace_webhook:true only if that deployment is retired.");
+      else if (other && pn && mine(before?.phone)) await setPhone();
+      else if (other) this.requireNewApp(host(other), "webhook");
       else await setApp();
     }
     const after = await readNumber();
     if (after) this.add("webhook_effective", "Where Meta now sends this number's events", mine(after.phone ?? after.waba ?? after.app) ? "PASS" : "WARN",
       mine(after.phone ?? after.waba ?? after.app) ? "this deployment" : `another URL (${host(after.phone ?? after.waba ?? after.app ?? "")}) or none`,
       { level: after.phone ? "phone" : after.waba ? "waba" : after.app ? "app" : "none", before_host: effective ? host(effective) : null });
+  }
+
+  /** One bot per Meta app (default): record why this app cannot take this bot and how to create a new one. Never changes anything at Meta. */
+  requireNewApp(currentHost: string, where: "app_in_use" | "webhook"): void {
+    const app = this.ids.app_id;
+    this.newApp = {
+      reason: `Meta app ${app ?? "(this app)"} already serves another bot (its webhook callback points to ${currentHost}). Default: one bot per Meta app.`,
+      current_host: currentHost, app_id: app, business_id: this.ids.business_id,
+      steps: [
+        "developers.facebook.com > My Apps > Create app: type Business, use case WhatsApp (Connect with customers through WhatsApp), and pick the SAME business portfolio",
+        "on the new app's WhatsApp > API Setup, add this bot's number (a new WhatsApp Business Account in the same portfolio keeps the bots' events apart)",
+        "Business Settings > System users: give a system user full control of the NEW app and that WhatsApp account, then generate a never-expiring token for the new app (whatsapp_business_management, whatsapp_business_messaging)",
+        "re-run meta-setup on this Worker with the new app's token and the new app's app_secret (and its app_id); the webhook is then set at the new app's level",
+      ],
+      untouched: "the other bot's app, webhook, number and token were not changed",
+      override: "only if ONE bot should answer several numbers on this app: re-run with webhook_scope \"phone\" (per-number override, the fallback path)",
+    };
+    this.next.push("create a new Meta app for this bot in the same business portfolio (see new_app_required), then re-run meta-setup with its token and app_secret");
+    this.add(where, where === "app_in_use" ? "Target Meta app is free for this bot (one bot per Meta app)" : N_WEBHOOK, "FAIL",
+      `new_app_required: this Meta app already serves another bot (${currentHost}); nothing was changed. Create a NEW Meta app for this bot in the same business portfolio (its own webhook, app secret and system-user token) and re-run with it. Per-number override only on request: webhook_scope "phone".`,
+      { mode: "new_app_required", current_host: currentHost, app_id: app });
+  }
+
+  /** Runs before any other step (auto scope only): is this Meta app already serving ANOTHER bot? Reads only. */
+  async appInUse(origin: string): Promise<boolean> {
+    const q = this.q;
+    if (q.webhookScope !== "auto" || q.replaceWebhook) return false;
+    const url = q.webhookUrl ?? `${origin}/api/webhook`;
+    const mine = (u: string | null | undefined) => !!u && sameUrl(u, url);
+    const host = (u: string) => { try { return new URL(u).host; } catch { return "(unreadable)"; } };
+    const app = this.ids.app_id, pn = this.ids.phone_number_id;
+    let appCb: string | null = null, phoneCb: string | null = null;
+    if (pn) {
+      const r = await this.g.call("GET", `/${pn}`, { token: this.tok, query: { fields: "webhook_configuration" } });
+      const w = r.ok ? r.body?.webhook_configuration ?? {} : {};
+      if (typeof w.phone_number === "string" && w.phone_number) phoneCb = w.phone_number;
+      if (typeof w.application === "string" && w.application) appCb = w.application;
+    }
+    if (app && this.appSecret) {
+      const appTok = `${app}|${this.appSecret}`; this.r.add(appTok);
+      const r = await this.g.call("GET", `/${app}/subscriptions`, { appToken: appTok });
+      const e = r.ok ? list(r.body).find((x) => x.object === "whatsapp_business_account") : undefined;
+      if (r.ok) appCb = e ? String(e.callback_url ?? "") || null : null;
+    }
+    if (!appCb || mine(appCb) || mine(phoneCb)) return false; // free, already ours, or this number was already routed here on purpose
+    this.requireNewApp(host(appCb), "app_in_use");
+    return true;
   }
 
   // ---- templates / display name / test send ---------------------------------------------------------------------------------------------
@@ -794,7 +850,7 @@ export function metaSetupGet(ctx: Ctx, req: Request): Response {
     env_present: { WA_ACCESS_TOKEN: !!c.waAccessToken, WA_APP_SECRET: !!c.waAppSecret, WA_VERIFY_TOKEN: !!c.waVerifyToken, WA_PHONE_NUMBER_IDS: c.phoneNumberIds.length > 0, TEST_RECIPIENTS: c.testRecipients.length },
     default_webhook_url: `${new URL(req.url).origin}/api/webhook`,
     steps: ["preflight", ...STEP_ORDER], default_run: DEFAULT_RUN,
-    ...(c.metaSetupDryRun ? { dry_run_token: DRY_RUN_TOKEN } : {}),
+    ...(c.metaSetupDryRun ? { dry_run_token: DRY_RUN_TOKEN, dry_run_token_app_in_use: DRY_RUN_TOKEN_APP_IN_USE } : {}),
     note: "POST {action|steps, bootstrap_token, ...}. See docs/META-GUIDED-CHECKLIST.md. GET makes no Meta call.",
   });
 }
@@ -829,7 +885,7 @@ export async function metaSetupPost(ctx: Ctx, req: Request, host: MetaSetupHost 
     }
     const dry = ctx.cfg.metaSetupDryRun;
     const t0 = ctx.now();
-    const stub = dry ? new FakeMeta({ dryRun: true }).fetch : undefined;
+    const stub = dry ? new FakeMeta({ dryRun: true, appInUse: q.token === DRY_RUN_TOKEN_APP_IN_USE }).fetch : undefined;
     const g = new Graph(stub ?? ctx.fetch, q.graphVersion ?? ctx.cfg.graphVersion, r, () => TIME_BUDGET_MS - (ctx.now() - t0));
     const s = new Setup(ctx, q, g, r);
     s.tok = q.token ?? ctx.cfg.waAccessToken ?? "";
@@ -842,6 +898,9 @@ export async function metaSetupPost(ctx: Ctx, req: Request, host: MetaSetupHost 
     const proceed = await s.preflight();
     const origin = new URL(req.url).origin;
     let blockedBy: string | null = proceed ? null : "preflight";
+    // one bot per Meta app (default): before any write, stop if the target app already serves another bot
+    const SETUP_STEPS: StepId[] = ["system_user", "phone_add", "phone_request_code", "phone_verify_code", "phone_register", "subscribed_apps", "webhook"];
+    if (proceed && q.steps.some((x) => SETUP_STEPS.includes(x)) && (await s.appInUse(origin))) blockedBy = "app_in_use";
     for (const step of q.steps) {
       if (blockedBy) { s.add(step, step, "SKIP", `blocked by ${blockedBy}`); continue; }
       if (TIME_BUDGET_MS - (ctx.now() - t0) < 3000) { s.add(step, step, "SKIP", "time_budget: re-run to continue (completed steps are skipped)"); continue; }
@@ -865,7 +924,7 @@ export async function metaSetupPost(ctx: Ctx, req: Request, host: MetaSetupHost 
       if (bad && !q.continueOnFail) blockedBy = bad.id;
     }
     // the number this deployment serves: an empty WA_PHONE_NUMBER_IDS serves none, so the setup number is stored once (never replaced)
-    const pnSel = s.ids.phone_number_id;
+    const pnSel = s.newApp ? null : s.ids.phone_number_id; // new_app_required: this deployment does not take the number on this app
     if (pnSel && !dry && q.steps.includes("webhook") && !ctx.cfg.phoneNumberIds.length && !ctx.cfg.acceptAnyPhoneNumber) {
       const T = "phone_number_ids_stored", TN = "This deployment serves the setup number (WA_PHONE_NUMBER_IDS)";
       if (!host.storeSecrets) { s.add(T, TN, "WARN", `set WA_PHONE_NUMBER_IDS=${pnSel} on this Worker: until then it answers no number`); }
@@ -893,7 +952,7 @@ export async function metaSetupPost(ctx: Ctx, req: Request, host: MetaSetupHost 
     const out: Record<string, unknown> = {
       ok: sum.fail === 0 && sum.pass > 0, dry_run: dry, graph_version: q.graphVersion ?? ctx.cfg.graphVersion, token_source: s.tokenSource,
       steps_requested: q.steps, ids: s.ids, summary: sum, results: s.results,
-      ...(s.manual ? { manual: s.manual } : {}), ...(s.next.length ? { next: s.next } : {}),
+      ...(s.manual ? { manual: s.manual } : {}), ...(s.newApp ? { new_app_required: s.newApp } : {}), ...(s.next.length ? { next: s.next } : {}),
       ...(dry ? { dry_run_notice: "META_SETUP_DRY_RUN=1: every Meta call was answered by a built-in stub; nothing was sent to graph.facebook.com and all ids/values are fake." } : {}),
     };
     ctx.log("meta_setup", { steps: q.steps.length, pass: sum.pass, fail: sum.fail, dry });

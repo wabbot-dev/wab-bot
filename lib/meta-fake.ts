@@ -7,6 +7,9 @@
  */
 export const DRY_RUN_TOKEN = "DRYRUN_USER_TOKEN";
 export const DRY_RUN_MINTED = "DRYRUN_MINTED_TOKEN_NOT_REAL";
+/** dry run only: this bootstrap token makes the stub's app look as if it already served ANOTHER bot (exercises new_app_required) */
+export const DRY_RUN_TOKEN_APP_IN_USE = "DRYRUN_USER_TOKEN_APP_IN_USE";
+export const DRY_RUN_OTHER_CALLBACK = "https://wab-bot-other-bot.example.invalid/api/webhook";
 
 export interface FakeFailure { match: RegExp; times?: number; status?: number; code?: number; message?: string }
 export interface FakeTokenInfo { type: string; scopes: string[]; expiresAt: number; appId?: string; userId?: string; valid?: boolean }
@@ -16,6 +19,8 @@ export interface FakePhone {
 }
 export interface FakeMetaOpts {
   dryRun?: boolean;
+  /** dry run: start with the app-level callback pointing to another (fake) bot */
+  appInUse?: boolean;
   appId?: string; appSecret?: string; userId?: string; businessId?: string; wabaId?: string;
   tokens?: Record<string, FakeTokenInfo>;
   noBusiness?: boolean; businessCount?: number; wabaCount?: number;
@@ -71,6 +76,8 @@ export class FakeMeta {
     this.failures = [...(o.failures ?? [])];
     this.tokens = { ...(o.tokens ?? {}) };
     if (d) this.tokens[DRY_RUN_TOKEN] = { type: "USER", scopes: ALL, expiresAt: Math.floor(Date.now() / 1000) + 7200, appId: this.appId, userId: this.userId };
+    if (d) this.tokens[DRY_RUN_TOKEN_APP_IN_USE] = { ...this.tokens[DRY_RUN_TOKEN]! };
+    if (d && o.appInUse) this.appSub = { object: "whatsapp_business_account", callback_url: DRY_RUN_OTHER_CALLBACK, verify_token: "other-bot-verify", fields: ["messages"] };
     if (!o.noBusiness) {
       for (let i = 0; i < (o.businessCount ?? 1); i++) {
         this.businesses.push({ id: i === 0 ? this.businessId : `${this.businessId}${i}`, name: i === 0 ? "Fake Portfolio" : `Fake Portfolio ${i + 1}`, verification_status: "not_verified" });

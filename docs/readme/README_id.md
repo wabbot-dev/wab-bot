@@ -147,7 +147,7 @@ curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-su
 
 - **Proyek independen.** WAB bot tidak resmi: tidak berafiliasi dengan atau didukung oleh Meta, WhatsApp, atau xAI. WhatsApp dan Grok adalah merek dagang pemiliknya masing-masing.
 - **Aturan Meta berlaku.** Penggunaan WhatsApp Cloud API Anda mengikuti ketentuan, kebijakan pesan, dan aturan per nomor dari Meta, dan panggilan pada nomor bisnis memerlukan Verifikasi Bisnis Meta.
-- **Satu nomor per bot.** Satu deployment melayani satu bisnis dan satu nomor WhatsApp, dengan aplikasi Meta, token, dan akun Cloudflare Anda sendiri.
+- **Satu nomor per bot.** Satu deployment melayani satu bisnis dan satu nomor WhatsApp, dengan aplikasi Meta, token, dan akun Cloudflare Anda sendiri. Jika aplikasi Meta yang Anda gunakan untuk bot baru sudah melayani bot lain, penyiapan tidak mengubah apa pun dan meminta Anda membuat aplikasi Meta baru di portofolio bisnis yang sama.
 - **Panggilan Anda yang mengaktifkan.** Secara bawaan mati; Anda membukanya dengan menyebut nomornya, dan panggilan memakai kredit xAI Anda sendiri (sekitar $0.08 per menit).
 - **Hanya panggilan masuk, tanpa rekaman audio.** Panggilan keluar dan perekaman audio tidak didukung. Transkrip teks disimpan secara bawaan dan dapat Anda matikan.
 - **SIP dan API panggilan Graph saling eksklusif per nomor.** Selama sebuah nomor memakai SIP untuk panggilan, seperti bot ini, endpoint panggilan Graph Meta tidak tersedia pada nomor itu.

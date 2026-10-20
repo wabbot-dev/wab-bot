@@ -147,7 +147,7 @@ curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-su
 
 - **Dự án độc lập.** WAB bot là dự án không chính thức: không liên kết với và không được Meta, WhatsApp hay xAI chứng thực. WhatsApp và Grok là nhãn hiệu của chủ sở hữu tương ứng.
 - **Quy tắc của Meta được áp dụng.** Việc dùng WhatsApp Cloud API tuân theo điều khoản, chính sách nhắn tin và quy tắc theo từng số của Meta; gọi thoại trên số doanh nghiệp cần Xác minh doanh nghiệp của Meta.
-- **Một số cho mỗi bot.** Một lần triển khai phục vụ một doanh nghiệp và một số WhatsApp, với ứng dụng Meta, token và tài khoản Cloudflare của riêng bạn.
+- **Một số cho mỗi bot.** Một lần triển khai phục vụ một doanh nghiệp và một số WhatsApp, với ứng dụng Meta, token và tài khoản Cloudflare của riêng bạn. Nếu ứng dụng Meta mà bạn dùng cho bot mới đã phục vụ một bot khác, quá trình thiết lập sẽ không thay đổi gì và yêu cầu bạn tạo một ứng dụng Meta mới trong cùng danh mục doanh nghiệp.
 - **Bạn tự bật tính năng gọi.** Mặc định là tắt; bạn mở và chỉ định số, và cuộc gọi dùng tín dụng xAI của chính bạn (khoảng $0.08 mỗi phút).
 - **Chỉ cuộc gọi đến, không ghi âm.** Không hỗ trợ gọi ra và ghi âm. Bản ghi chữ được lưu theo mặc định và bạn có thể tắt.
 - **SIP và API gọi Graph loại trừ nhau trên mỗi số.** Khi một số dùng SIP để gọi, như bot này, các endpoint gọi Graph của Meta không dùng được trên số đó.

@@ -11,7 +11,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, openSync, writeSync, closeSync, fstatSync, fchmodSync, writeFileSync, chmodSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 export const REQUIRED_SCOPES = ["whatsapp_business_management", "whatsapp_business_messaging"];
 export const DEFAULT_GRAPH_VERSION = "v25.0";
 const HTTP_TIMEOUT_MS = 20000;
@@ -60,6 +60,13 @@ export function parseArgs(argv) {
   return o;
 }
 
+export const NEW_APP_STEPS = [
+  "developers.facebook.com > My Apps > Create app: type Business, use case WhatsApp, and pick the SAME business portfolio",
+  "on the new app's WhatsApp > API Setup, add this bot's number (a new WhatsApp Business Account in the same portfolio keeps the bots apart)",
+  "Business Settings > System users: give a system user full control of the NEW app and that WhatsApp account; generate a never-expiring token for the new app",
+  "re-run this script with the new app's token and app secret (--app-id <new app id>); the webhook is then set at the new app's level",
+];
+
 export function hostOf(u) { try { return new URL(u).host; } catch { return "(unreadable)"; } }
 
 export const HELP = `Meta (WhatsApp Cloud API) setup, run on your own device.
@@ -74,7 +81,12 @@ Flags
   --graph-version <vNN.0> default ${DEFAULT_GRAPH_VERSION}
   --waba-override         ALSO set the callback on the WABA itself (POST /{waba}/subscribed_apps override_callback_uri). Off by default.
   --phone-override        route ONLY this phone number to this bridge (POST /{phone-number-id} webhook_configuration.override_callback_uri);
-                          the app-level callback is left alone. Chosen automatically when the app already points to another deployment.
+                          the app-level callback is left alone. Fallback for ONE bot answering several numbers on a shared app; never
+                          chosen automatically.
+
+One bot per Meta app (default): if the app's webhook callback already points to ANOTHER deployment, nothing is changed and the
+webhook step FAILs with "new app required": create a NEW Meta app for this bot in the same business portfolio (its own webhook,
+app secret and system-user token) and re-run with that app's token. --phone-override or --replace-webhook only on purpose.
   --replace-webhook       allow replacing a callback that points to ANOTHER deployment (app, WABA or number level). Never the default.
   --skip-app-subscription never try to set the app-level webhook; just print the dashboard values
   --skip-handshake        do not test the webhook handshake against your bridge first
@@ -249,6 +261,7 @@ export async function main(argv, deps = {}) {
 
   const g = new Graph({ fetchImpl, version: graphVersion, redactor });
   let appSecret = env.META_APP_SECRET || "";
+  let webhookDone = false, newAppRequired = "";
   const steps = [];
   const bundle = {
     tool: "meta-setup.mjs", version: VERSION, generatedAt: (deps.now ? deps.now() : new Date()).toISOString(), graphVersion,
@@ -343,6 +356,21 @@ export async function main(argv, deps = {}) {
     }
   }
 
+  // ---- 2b one bot per Meta app: does this app already serve ANOTHER bot? (read only; the number's own view needs no app secret) ------------
+  const flagNewApp = (cur) => {
+    newAppRequired = hostOf(cur);
+    bundle.webhook.mode = "new_app_required";
+    bundle.newAppRequired = { currentHost: newAppRequired, appId, steps: NEW_APP_STEPS, override: "--phone-override only if ONE bot should answer several numbers on this app" };
+    step("webhook_app_level", "Meta app is free for this bot (one bot per Meta app)", "FAIL", `new app required: this app's webhook already points to another bot (${newAppRequired}); nothing was changed. Create a NEW Meta app for this bot in the same business portfolio and re-run with its token. --phone-override only for one bot answering several numbers`);
+  };
+  if (!fl["replace-webhook"] && !fl["phone-override"] && !fl["waba-override"] && !fl["skip-app-subscription"]) {
+    const v = await g.request("GET", `/${phoneId}`, { token, query: { fields: "webhook_configuration" } });
+    const wc = v.ok ? v.body?.webhook_configuration || {} : {};
+    const appCb = typeof wc.application === "string" ? wc.application : "";
+    const routedHere = typeof wc.phone_number === "string" && sameUrl(wc.phone_number, webhookUrl);
+    if (appCb && !sameUrl(appCb, webhookUrl) && !routedHere) flagNewApp(appCb);
+  }
+
   // ---- 3 subscribe app to the WABA ---------------------------------------------------------------------------------------------------
   const readSubs = async () => g.request("GET", `/${wabaId}/subscribed_apps`, { token });
   const subsHaveApp = (body) => {
@@ -350,7 +378,8 @@ export async function main(argv, deps = {}) {
     const ids = d.map((x) => String(x?.whatsapp_business_api_data?.id ?? x?.id ?? ""));
     return { any: d.length > 0, has: appId ? ids.includes(String(appId)) : d.length > 0, d };
   };
-  {
+  if (newAppRequired) step("subscribe", "Subscribe app to WABA", "SKIP", "new app required: the other bot's app is not subscribed to anything new");
+  else {
     const pre = await readSubs();
     if (pre.ok) info(`      before: ${subsHaveApp(pre.body).d.length} app(s) subscribed`);
     const post = await g.request("POST", `/${wabaId}/subscribed_apps`, { token, form: {} });
@@ -368,10 +397,10 @@ export async function main(argv, deps = {}) {
 
   // ---- 4 webhook callback + verify token ---------------------------------------------------------------------------------------------------
   const wantApp = !fl["skip-app-subscription"];
-  if (!appSecret && wantApp && canAsk) appSecret = (await askHidden("App secret (hidden; needed to set the webhook automatically and for the bridge; Enter to skip): ")).trim();
+  if (!appSecret && wantApp && !newAppRequired && canAsk) appSecret = (await askHidden("App secret (hidden; needed to set the webhook automatically and for the bridge; Enter to skip): ")).trim();
   if (appSecret) { redactor.add(appSecret); bundle.secrets.appSecretReceived = true; }
-  let webhookDone = false;
-  if (fl["skip-app-subscription"]) step("webhook", "Webhook callback", "SKIP", "--skip-app-subscription: set it in the dashboard (values below)");
+  if (newAppRequired) step("webhook", "Webhook callback", "SKIP", "new app required (see webhook_app_level)");
+  else if (fl["skip-app-subscription"]) step("webhook", "Webhook callback", "SKIP", "--skip-app-subscription: set it in the dashboard (values below)");
   else if (!appSecret || !appId) step("webhook", "Webhook callback (app level)", "SKIP", !appId ? "app id unknown" : "no app secret given; set it in the dashboard (values below)");
   else {
     const appToken = `${appId}|${appSecret}`; redactor.add(appToken);
@@ -391,10 +420,9 @@ export async function main(argv, deps = {}) {
       step("webhook_auth", "App secret accepted by Meta (GET /{app}/subscriptions)", "PASS");
       const cur = (Array.isArray(before.body?.data) ? before.body.data : []).find((x) => x && x.object === "whatsapp_business_account")?.callback_url || "";
       const elsewhere = cur && !sameUrl(cur, webhookUrl);
-      if (elsewhere && !fl["replace-webhook"]) {
-        // a second bot on the same Meta app: never move the first bot's callback; route only this number here instead
-        step("webhook_app_level", "App-level callback belongs to another deployment", "WARN", `left unchanged (${hostOf(cur)}); routing only this number here (--phone-override). --replace-webhook would move every number`);
-        fl["phone-override"] = true;
+      if (elsewhere && !fl["replace-webhook"] && !fl["phone-override"]) {
+        // one bot per Meta app (default): never move the other bot's callback and never share its app silently
+        flagNewApp(cur);
       } else if (fl["phone-override"]) {
         info("      --phone-override: the app-level callback is left as it is");
       } else {
@@ -435,7 +463,13 @@ export async function main(argv, deps = {}) {
       else step("waba_override", "WABA-level callback override (verified by GET)", "FAIL", ver.ok ? "override not visible afterwards" : ver.error);
     }
   }
-  if (!webhookDone) {
+  if (newAppRequired) {
+    info("");
+    info(`      NEW META APP REQUIRED: this app already serves another bot (${newAppRequired}). Its webhook was left as it is. Next:`);
+    NEW_APP_STEPS.forEach((s, i) => info(`        ${i + 1}. ${s}`));
+    info("      Do NOT enter this bot's callback in the old app's dashboard: that would move every number of the other bot here.");
+    info("");
+  } else if (!webhookDone) {
     bundle.webhook.mode = "manual_needed";
     info("");
     info("      MANUAL FALLBACK: in developers.facebook.com > your app > WhatsApp > Configuration > Webhook, press Edit and enter:");
@@ -495,7 +529,8 @@ export async function main(argv, deps = {}) {
 
   // ---- 7 secrets handling + result bundle ----------------------------------------------------------------------------------------------
   async function finish(reached) {
-    if (reached || tokenValid) {
+    if (newAppRequired && (fl["write-secrets"] || fl["push-cloudflare"])) step("secrets_file", "Secrets for this Worker", "SKIP", "new app required: this app's token and secret belong to the other bot; nothing was written or pushed");
+    else if (reached || tokenValid) {
       if (fl["write-secrets"]) {
         try {
           const r = (deps.writeSecrets ?? writeSecretsFile)(fl["write-secrets"], { WA_ACCESS_TOKEN: token, WA_APP_SECRET: appSecret }, { force: !!fl.force });

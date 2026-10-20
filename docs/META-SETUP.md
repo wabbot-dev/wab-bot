@@ -36,7 +36,7 @@ Never paste a secret into a chat or a command line. The deploy script and `scrip
 
 ## Optional: the in-Worker setup route
 
-`/api/admin/meta-setup` is **off by default** (404). Set `META_SETUP_ENABLED=1` only while you use it, then remove it. It needs `ADMIN_TOKEN` and can mint a non-expiring token, which is why it is not left on. The local script above is the recommended path. `META_SETUP_DRY_RUN=1` makes the route answer from a built-in stub and never call `graph.facebook.com`.
+`/api/admin/meta-setup` is **off by default** (404). Set `META_SETUP_ENABLED=1` only while you use it, then remove it. It needs `ADMIN_TOKEN` and can mint a non-expiring token, which is why it is not left on. The local script above is the recommended path. `META_SETUP_DRY_RUN=1` makes the route answer from a built-in stub and never call `graph.facebook.com`. With the stub, the bootstrap token `DRYRUN_USER_TOKEN_APP_IN_USE` (shown by `GET` as `dry_run_token_app_in_use`) makes the stub's app look as if it already served another bot, so you can see the one-bot-per-app answer (`new_app_required`) without Meta.
 
 ## Subscribe your app to the WABA (always), then read it back
 
@@ -49,20 +49,37 @@ curl -s -X POST https://<worker>/api/admin/meta-setup -H "Authorization: Bearer 
 
 It reads `GET /{WABA_ID}/subscribed_apps`, subscribes with `POST` only if your app is missing, and reads it back. The step's facts list `before_app_ids` and `after_app_ids` (ids only); a `WARN` (`subscribed_apps_other_apps`) says when other apps were subscribed but yours was not. PASS only when your app id is listed afterwards. Later, the admin MCP `setup_check` repeats the read (GET only) when `WA_WABA_ID` is set (`WA_APP_ID` makes it exact).
 
-## A second bot on the same Meta app (never overwrite the first bot's webhook)
+## One bot per Meta app (a second bot gets a new Meta app)
 
-A Meta app has ONE app-level webhook callback for every WhatsApp number it serves. If you add a second bot (for example a business
-line next to an existing consumer line) on the same app, moving that callback would silently cut the first bot off. So setup never
-replaces a callback that points to another deployment:
+A Meta app has ONE app-level webhook callback, ONE app secret and its own system-user tokens for every WhatsApp number it serves.
+So the default is **one bot per Meta app**: when you add another bot (for example a business line next to an existing consumer
+line, or a second import of this template), it gets a **new Meta app** in the **same business portfolio**, with its own webhook,
+app secret and system-user token. The number can live under the same portfolio (a new WhatsApp Business Account there keeps the
+bots' events apart). Setup never moves or shares another bot's webhook on its own.
+
+### A second bot on the same Meta app (never overwrite the first bot's webhook)
+
+What the setup does when the target app may already serve a bot:
 
 - **The setup reads what Meta routes today first**: `GET /{phone-number-id}?fields=webhook_configuration` (the number's own view:
   `phone_number`, `whatsapp_business_account`, `application`, needs no app secret) and `GET /{app-id}/subscriptions`.
 - **Free app (first bot):** the app-level callback is set, as before.
-- **App already serving another deployment:** the app level is left unchanged (`webhook_app_level` WARN, showing only that
-  deployment's host) and **only this number** is routed here with Meta's per-number override:
+- **App already serving another deployment (default `auto`):** nothing is changed. The in-Worker route stops right after the token
+  check with `app_in_use` FAIL (`mode: new_app_required`, showing only that deployment's host) before any write, skips the other
+  steps and returns a `new_app_required` block (why, the steps to create the new app, what was left untouched). The CLI reports
+  `webhook_app_level` FAIL, sets the bundle's `webhook.mode` to `new_app_required`, prints **NEW META APP REQUIRED** with the same
+  steps, and does not print the dashboard values (typing them into the shared app would move the other bot's numbers). Then:
+  1. developers.facebook.com > My Apps > Create app: type Business, WhatsApp use case, the **same** business portfolio.
+  2. Add this bot's number on the new app's WhatsApp > API Setup.
+  3. Give a system user full control of the new app and its WhatsApp account; generate a never-expiring token for the new app.
+  4. Re-run the setup with the new app's token and app secret (CLI: `--app-id` of the new app). The webhook is then set at the
+     new app's level.
+- **Fallback, only on purpose: one bot answering several numbers on a shared app.** Ask for Meta's per-number override explicitly:
+  `webhook_scope: "phone"` (route) or `--phone-override` (CLI). The app level stays unchanged and only this number is routed here:
   `POST /{phone-number-id}` with `webhook_configuration.override_callback_uri` (at most 200 characters) and `verify_token`, then read
   back. Meta sends this number's events there and every other number's events to the app-level URL. The app must be subscribed to
-  the WABA (the `subscribed_apps` step). Source: Meta's "Override callback URL" guide for the WhatsApp Cloud API.
+  the WABA (the `subscribed_apps` step). Source: Meta's "Override callback URL" guide for the WhatsApp Cloud API. A later `auto`
+  re-run on a number already routed here this way is recognised and left as it is.
 - **This number or its WABA already routed to another deployment:** refused (FAIL), nothing changed.
 - **Replacing on purpose** (the other deployment is retired): send `replace_webhook: true` (route) or `--replace-webhook` (CLI). The
   step then reports WARN with the old host.
