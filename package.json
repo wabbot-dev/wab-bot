@@ -1,6 +1,6 @@
 {
   "name": "wab-bot",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "WAB bot: AI auto-reply and voice answering for business chat on the WhatsApp Cloud API, on Cloudflare Workers (one SQLite Durable Object): one business, one AI agent over MCP. One deploy per business, own Cloudflare account, own secrets.",
   "license": "MIT",

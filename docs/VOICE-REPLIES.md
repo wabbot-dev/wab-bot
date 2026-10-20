@@ -1,6 +1,6 @@
 # Voice-note replies (optional, off by default)
 
-**Status: unreleased (added after 0.2.0), off unless the owner sets `VOICE_REPLIES`.** Evidence is listed at the end of this page; read
+**Status: released in 0.3.0 (preview), off unless the owner sets `VOICE_REPLIES`.** Evidence is listed at the end of this page; read
 [STATUS.md](STATUS.md) for the overall picture.
 
 With voice replies on, the agent's text reply can also go out as a **WhatsApp voice note** (the bubble with a play button and waveform),

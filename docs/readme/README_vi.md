@@ -14,7 +14,7 @@
 **Một cầu nối nhỏ, đơn người thuê (single-tenant): khách hàng nhắn tin tới số WhatsApp Cloud API của bạn, tác tử của bạn trả lời thông qua các công cụ có bảo vệ, và không có gì rời khỏi tài khoản của bạn.**
 
 [![MIT license](https://img.shields.io/badge/license-MIT-f4c430?style=flat-square)](../../LICENSE)
-[![status: preview v0.2.0](https://img.shields.io/badge/status-preview_v0.2.0-orange?style=flat-square)](../STATUS.md)
+[![status: preview v0.3.0](https://img.shields.io/badge/status-preview_v0.3.0-orange?style=flat-square)](../STATUS.md)
 [![Cloudflare Workers](https://img.shields.io/badge/runs_on-Cloudflare_Workers-f38020?style=flat-square&logo=cloudflare&logoColor=white)](../CLOUDFLARE.md)
 [![runtime dependencies: 0](https://img.shields.io/badge/runtime_dependencies-0-2ea44f?style=flat-square)](../../THIRD_PARTY_NOTICES.md)
 [![CI](https://github.com/wabbot-dev/wab-bot/actions/workflows/ci.yml/badge.svg)](../../.github/workflows/ci.yml)
@@ -47,7 +47,7 @@ Bạn cần: một tài khoản Cloudflare do bạn sở hữu, Node.js 20+ (khu
 ```bash
 git clone https://github.com/wabbot-dev/wab-bot.git && cd wab-bot
 npm ci
-npm run check          # typecheck, 271 logic tests, 64 workerd tests, docs check
+npm run check          # typecheck, 293 logic tests, 65 workerd tests, docs check
 npm run build          # wrangler deploy --dry-run: bundle and binding check
 npm run smoke:local    # wrangler dev --local with random fake secrets
 ```

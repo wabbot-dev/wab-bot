@@ -16,8 +16,8 @@ This page lists what is deliberately not in v0.1.0 and what is planned. Nothing 
 | First live run with a business-owned number, a template and a woken agent | Open | The gate for dropping the preview label |
 | Run the interactive `wrangler login --device` deploy path live | Open | The script ran live once with an API token; the device login and hidden prompts did not |
 | Retention pass over more than 100 conversations per run | Open | Known limitation |
-| Voice notes and images | Built (unreleased) | Transcribed / described with Workers AI, raw media never stored ([MEDIA.md](MEDIA.md)) |
+| Voice notes and images | Built (0.3.0) | Transcribed / described with Workers AI, raw media never stored ([MEDIA.md](MEDIA.md)) |
 | Video, documents, stickers | Not planned | Type and caption only |
-| Voice-note replies (synthesized voice notes) | Built (unreleased), off by default | Workers AI text-to-speech plus an in-Worker Ogg Opus encoder; no Arabic voice on Workers AI yet ([VOICE-REPLIES.md](VOICE-REPLIES.md)) |
+| Voice-note replies (synthesized voice notes) | Built (0.3.0), off by default | Workers AI text-to-speech plus an in-Worker Ogg Opus encoder; no Arabic voice on Workers AI yet ([VOICE-REPLIES.md](VOICE-REPLIES.md)) |
 
 Want something here sooner, or something that is not listed? Open a [design discussion](https://github.com/wabbot-dev/wab-bot/issues/new?template=design_discussion.yml) or a feature request, starting from the problem. Read the [contribution scope](../CONTRIBUTING.md#contribution-scope) first.
