@@ -72,10 +72,10 @@ describe("claim / reply / finish over MCP with the Durable Object store", () => 
     expect((await convOf(wa)).state).toBe("replied");
   });
 
-  it("the tool list has ten tools and send_reply has no recipient field", async () => {
+  it("the tool list has twelve tools and send_reply has no recipient field", async () => {
     const j: any = await (await mcp("tools/list", {})).json();
     expect(j.result.tools.map((t: any) => t.name).sort()).toEqual([
-      "claim_conversation", "escalate_conversation", "finish_conversation", "get_controls", "get_history", "get_overview", "list_pending", "release_conversation", "send_reply", "start_conversation",
+      "claim_conversation", "escalate_conversation", "finish_conversation", "get_controls", "get_history", "get_overview", "list_pending", "release_conversation", "report_payment", "send_reply", "start_conversation", "submit_request",
     ]);
     expect(Object.keys(j.result.tools.find((t: any) => t.name === "send_reply").inputSchema.properties)).not.toContain("to");
   });

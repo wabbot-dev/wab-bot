@@ -48,10 +48,11 @@ test("defaults are fail-safe: LAUNCH_MODE test, auto-reply paused, safe limits",
   assert.equal(cfg.launchMode, "test");
   assert.equal(loadConfig({ LAUNCH_MODE: "LIVE " }).launchMode, "live");
   assert.equal(loadConfig({ LAUNCH_MODE: "production" }).launchMode, "test");
-  assert.equal(cfg.wakeDebounceMs, 8000);
+  assert.equal(cfg.wakeDebounceMs, 3000, "a shorter default reply delay (was 8 s)");
   assert.equal(loadConfig({ WAKE_DEBOUNCE_MS: "999999" }).wakeDebounceMs, 25000);
   assert.equal(loadConfig({ WAKE_DEBOUNCE_MS: "-5" }).wakeDebounceMs, 0);
-  assert.deepEqual([cfg.leaseMs, cfg.rateConvMax, cfg.rateConvWindowMs, cfg.rateGlobalPerHour, cfg.sendTimeoutMs], [300000, 5, 600000, 60, 15000]);
+  assert.deepEqual([cfg.leaseMs, cfg.rateConvMax, cfg.rateConvWindowMs, cfg.rateGlobalPerHour, cfg.sendTimeoutMs], [300000, 8, 600000, 300, 15000]);
+  assert.deepEqual([cfg.sendRetries, cfg.sendRetryBaseMs, cfg.readReceipts, cfg.typingIndicator], [2, 1000, true, true]);
   assert.deepEqual(cfg.templateAllowlist, []);
   const h = makeHarness({ LAUNCH_MODE: undefined });
   const ov: any = await (await adminGet(h.ctx, adminReq("GET"))).json();
@@ -86,7 +87,7 @@ test("admin API: auth, overview, actions and their error strings", async () => {
   // escalate via lease, then reopen (no auto wake), wake, resolve
   const lease = await claimAndRead(h);
   const { escalateConversation } = await import("../lib/tools");
-  assert.deepEqual(await escalateConversation(h.ctx, id, lease, "red flag"), { ok: true, state: "escalated" });
+  assert.deepEqual(await escalateConversation(h.ctx, id, lease, "red flag"), { ok: true, state: "escalated", category: "other", owner_alerted: false });
   const ov: any = await (await adminGet(h.ctx, adminReq("GET"))).json();
   assert.equal(ov.conversations[0].state, "escalated");
   assert.equal(ov.conversations[0].escalation_reason, "red flag");
@@ -130,7 +131,7 @@ test("cron: Bearer CRON_SECRET required, retries due wakes", async () => {
   assert.equal((await getConv(h)).wake.status, "scheduled", "success is not persisted; claim records it");
 });
 
-test("MCP over HTTP: Bearer MCP_TOKEN, ten tools, calls work", async () => {
+test("MCP over HTTP: Bearer MCP_TOKEN, twelve tools, calls work", async () => {
   const h = makeHarness();
   await activate(h);
   await post(h, inboundPayload({ wamid: "wamid.MC1" }));
@@ -159,7 +160,7 @@ test("MCP over HTTP: Bearer MCP_TOKEN, ten tools, calls work", async () => {
   assert.equal((await route(new Request("https://x.test/mcp", { method: "GET" }))).status, 401);
   const list = await parse(await rpc("tools/list", {}));
   const names = list.result.tools.map((t: any) => t.name).sort();
-  assert.deepEqual(names, ["claim_conversation", "escalate_conversation", "finish_conversation", "get_controls", "get_history", "get_overview", "list_pending", "release_conversation", "send_reply", "start_conversation"]);
+  assert.deepEqual(names, ["claim_conversation", "escalate_conversation", "finish_conversation", "get_controls", "get_history", "get_overview", "list_pending", "release_conversation", "report_payment", "send_reply", "start_conversation", "submit_request"]);
   const send = list.result.tools.find((t: any) => t.name === "send_reply");
   assert.ok(!("to" in send.inputSchema.properties), "send_reply has no recipient field");
   const call = async (name: string, args: unknown) => {
@@ -225,7 +226,7 @@ test("MCP protocol: initialize negotiates a version, notifications get 202, batc
   const batch: any = await (await send([{ jsonrpc: "2.0", id: 1, method: "ping" }, { jsonrpc: "2.0", id: 2, method: "tools/list" }])).json();
   assert.equal(batch.length, 2);
   assert.deepEqual(batch[0].result, {});
-  assert.equal(batch[1].result.tools.length, 10);
+  assert.equal(batch[1].result.tools.length, 12);
   const nf: any = await (await send({ jsonrpc: "2.0", id: 3, method: "nope/nope" })).json();
   assert.equal(nf.error.code, -32601);
   const bad: any = await (await send({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "get_history", arguments: { conversation_id: "c_" + "0".repeat(20), lease: "short" } } })).json();

@@ -73,11 +73,11 @@ function sip(callId: string, from = CALLER, secret = SECRET) {
 }
 
 describe("admin MCP in workerd", () => {
-  it("is 404 without the binding, 401 with a wrong token, and serves the 14 tools with the right one", async () => {
+  it("is 404 without the binding, 401 with a wrong token, and serves the 17 tools with the right one", async () => {
     expect((await callWith(env({ ADMIN_MCP_TOKEN: "" }), "/admin/mcp", { method: "POST", headers: { Authorization: `Bearer ${ADMIN_MCP}` }, body: "{}" })).status).toBe(404);
     expect((await admin(env(), { jsonrpc: "2.0", id: 1, method: "ping" }, "wrong-wrong-wrong-wrong-wrong-wrong-12")).status).toBe(401);
     const j: any = await (await admin(env(), { jsonrpc: "2.0", id: 1, method: "tools/list" })).json();
-    expect(j.result.tools).toHaveLength(14);
+    expect(j.result.tools).toHaveLength(17);
     const st = await tool(env(), "get_status");
     expect(st.read_only).toBe(true);
     expect(st.config_present.ADMIN_MCP_TOKEN).toBe(true);

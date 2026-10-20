@@ -1,3 +1,5 @@
+import { decidePayment, deleteContact, listContacts, upsertContact } from "./business";
+import { alertsConfigured, sendAlert } from "./alerts";
 import { bearerOf, tokenOk } from "./crypto";
 import type { Ctx } from "./ctx";
 import { CONV_ID_RE, armWake, convKeyOf, normalize, windowOpen } from "./conv";
@@ -8,7 +10,7 @@ import { armedOf, kickPendingWakes, runWake, type Armed } from "./wake";
 import { createInvite, redeemInvite, SESSION_MS, sessionCookie, sessionOf, sessionValue } from "./staff";
 import { staffReply, startConversation } from "./tools";
 import { randomHex } from "./crypto";
-import { runMediaJob, wantsMedia } from "./media";
+import { runMediaJob, safeFilename, wantsMedia } from "./media";
 import { applyInbound } from "./webhook";
 import { claimConversation, getHistory, sendReply } from "./tools";
 import { isMonoOggOpus, synthesize, uploadVoice } from "./voice-reply";
@@ -167,7 +169,7 @@ export async function adminErase(ctx: Ctx, req: Request, id: string): Promise<Re
 
 export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
   if (!adminAuthorized(ctx, req)) return unauthorized();
-  let body: { action?: string; value?: string; conversation_id?: string; text?: string; template_name?: string; template_language?: string; idempotency_key?: string; ttl_minutes?: number };
+  let body: { action?: string; value?: string; conversation_id?: string; text?: string; template_name?: string; template_language?: string; idempotency_key?: string; ttl_minutes?: number; media?: unknown; contact?: Record<string, unknown>; number?: string; tag?: string; known?: boolean; offset?: number };
   try {
     body = await req.json();
   } catch {
@@ -181,6 +183,24 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
     const kicked = body.value === "active" ? await kickPendingWakes(ctx) : 0;
     return Response.json({ ok: true, auto_reply: body.value, woken: kicked });
   }
+  if (action === "test_alert") {
+    // owner only: one test alert to every configured channel (docs/ALERTS.md); no conversation, no customer
+    if (!ownerAuthorized(ctx, req)) return unauthorized();
+    if (!alertsConfigured(ctx)) return Response.json({ ok: false, error: "alerts_not_configured" });
+    const rec = await sendAlert(ctx, { event: "test", reason: "test alert from the admin page" });
+    return Response.json({ ok: !!rec, webhook: rec?.webhook ?? null, whatsapp: rec?.whatsapp ?? null });
+  }
+  if (action === "contact_upsert" || action === "contact_delete" || action === "contact_list") {
+    // the account directory (docs/BUSINESS-MODE.md) is the OWNER's: staff sessions can read conversations but not change who is a known account
+    if (!ownerAuthorized(ctx, req)) return unauthorized();
+    const r = action === "contact_upsert"
+      ? await upsertContact(ctx, typeof body.contact === "object" && body.contact ? body.contact : {})
+      : action === "contact_delete"
+        ? await deleteContact(ctx, body.number)
+        : await listContacts(ctx, { tag: typeof body.tag === "string" ? body.tag : undefined, known: typeof body.known === "boolean" ? body.known : undefined, offset: Number.isInteger(body.offset) ? Math.max(0, body.offset!) : 0, limit: 100 });
+    ctx.log("admin", { action, ok: r.ok === true });
+    return Response.json(r, { status: r.ok === true ? 200 : 400 });
+  }
   if (action === "staff_invite") {
     if (!ownerAuthorized(ctx, req)) return unauthorized(); // a staff session can never mint more sessions
     const inv = await createInvite(ctx, typeof body.ttl_minutes === "number" ? body.ttl_minutes : 15);
@@ -188,13 +208,18 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
   }
   const id = body?.conversation_id;
   if (typeof id !== "string" || !CONV_ID_RE.test(id)) return bad();
-  const known = ["takeover", "release", "release_hold", "reopen", "resolve", "wake", "delete_conversation", "reply", "opt_out", "opt_in"];
+  const known = ["takeover", "release", "release_hold", "reopen", "resolve", "wake", "delete_conversation", "reply", "opt_out", "opt_in", "payment_verify"];
   if (!action || !known.includes(action)) return bad();
 
   if (action === "delete_conversation") return eraseConversation(ctx, id);
+  if (action === "payment_verify") {
+    const r = await decidePayment(ctx, convKeyOf(id), String(body.value ?? ""));
+    ctx.log("admin", { action, conv: id, ok: r.ok === true });
+    return Response.json(r, { status: r.error === "not_found" ? 404 : 200 });
+  }
   if (action === "reply") {
     const str = (v: unknown, max: number) => (typeof v === "string" && v.length <= max ? v : undefined);
-    const r = await staffReply(ctx, { conversation_id: id, text: str(body.text, 4000), template_name: str(body.template_name, 100), template_language: str(body.template_language, 20), idempotency_key: str(body.idempotency_key, 100) });
+    const r = await staffReply(ctx, { conversation_id: id, text: str(body.text, 4000), template_name: str(body.template_name, 100), template_language: str(body.template_language, 20), idempotency_key: str(body.idempotency_key, 100), media: body.media });
     ctx.log("admin", { action, conv: id, ok: r.ok === true });
     return Response.json(r, { status: r.error === "not_found" ? 404 : 200 });
   }
@@ -264,7 +289,7 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
 export const SELFTEST_WA = "15550100099";
 
 /**
- * POST /api/admin/media-selftest?kind=audio|image[&voice=1][&caption=...][&via=graph] (Bearer ADMIN_TOKEN only; 404 unless MEDIA_SELFTEST=1).
+ * POST /api/admin/media-selftest?kind=audio|image|document[&voice=1][&caption=...][&filename=...][&via=graph] (Bearer ADMIN_TOKEN only; 404 unless MEDIA_SELFTEST=1).
  * via=graph first uploads the sample to the number's own Meta media store and then downloads it by media id (the real webhook path).
  * The body is the media file itself (sample audio or image). It runs the SAME understanding path as a WhatsApp message (caps,
  * Workers AI, fallback, counters) and stores the result as an inbound message in a self-test conversation with a fake number,
@@ -275,17 +300,19 @@ export async function adminMediaSelftest(ctx: Ctx, req: Request): Promise<Respon
   if (!ctx.cfg.mediaSelftest) return Response.json({ error: "not_found" }, { status: 404 });
   if (!ownerAuthorized(ctx, req)) return unauthorized();
   const url = new URL(req.url);
-  const type = url.searchParams.get("kind") === "image" ? "image" : url.searchParams.get("kind") === "audio" ? "audio" : null;
+  const k = url.searchParams.get("kind");
+  const type = k === "image" || k === "audio" || k === "document" ? k : null;
   if (!type) return bad();
   const kind = wantsMedia(ctx, type);
   if (!kind) return Response.json({ ok: false, error: "feature_off" });
   const bytes = new Uint8Array(await req.arrayBuffer());
   if (!bytes.byteLength || bytes.byteLength > 16_000_000) return bad();
-  const caption = kind === "image" ? url.searchParams.get("caption")?.slice(0, 1000) || undefined : undefined;
+  const caption = kind !== "audio" ? url.searchParams.get("caption")?.slice(0, 1000) || undefined : undefined;
+  const filename = kind === "document" ? safeFilename(url.searchParams.get("filename") ?? "sample.pdf") : undefined;
   const voice = kind === "audio" && url.searchParams.get("voice") === "1";
   const mime = (req.headers.get("content-type") ?? "").split(";")[0]!.trim() || undefined;
   const id = `selftest.${randomHex(8)}`;
-  let job: { kind: typeof kind; voice: boolean; caption?: string; mime?: string; bytes?: Uint8Array; mediaId?: string } = { kind, voice, caption, mime, bytes };
+  let job: { kind: typeof kind; voice: boolean; caption?: string; mime?: string; bytes?: Uint8Array; mediaId?: string; filename?: string } = { kind, voice, caption, mime, bytes, ...(filename ? { filename } : {}) };
   if (url.searchParams.get("via") === "graph") {
     // Exercise the REAL webhook download path: upload the sample to this number's own Meta media store (no message is sent; Meta
     // keeps uploads for 30 days), then let the job fetch it back by media id with the stored token, exactly as for a customer's file.
@@ -294,7 +321,7 @@ export async function adminMediaSelftest(ctx: Ctx, req: Request): Promise<Respon
     const form = new FormData();
     form.set("messaging_product", "whatsapp");
     form.set("type", mime ?? "application/octet-stream");
-    form.set("file", new Blob([bytes as unknown as ArrayBuffer], { type: mime ?? "application/octet-stream" }), kind === "image" ? "sample.jpg" : "sample.ogg");
+    form.set("file", new Blob([bytes as unknown as ArrayBuffer], { type: mime ?? "application/octet-stream" }), kind === "image" ? "sample.jpg" : kind === "document" ? (filename ?? "sample.pdf") : "sample.ogg");
     let up: Response;
     try {
       up = await ctx.fetch(`https://graph.facebook.com/${ctx.cfg.graphVersion}/${encodeURIComponent(pnid)}/media`, { method: "POST", headers: { Authorization: `Bearer ${ctx.cfg.waAccessToken}` }, body: form });
@@ -303,7 +330,7 @@ export async function adminMediaSelftest(ctx: Ctx, req: Request): Promise<Respon
     }
     const uj = (await up.json().catch(() => ({}))) as { id?: unknown };
     if (!up.ok || typeof uj.id !== "string") return Response.json({ ok: false, error: `upload_http_${up.status}` });
-    job = { kind, voice, caption, mime, mediaId: uj.id };
+    job = { kind, voice, caption, mime, mediaId: uj.id, ...(filename ? { filename } : {}) };
   }
   const pn = ctx.cfg.phoneNumberIds[0] ?? "selftest";
   const r = await applyInbound(ctx, { pn, waba: ctx.cfg.wabaId ?? "selftest", wa: SELFTEST_WA }, [
@@ -359,7 +386,8 @@ export async function adminVoiceSelftest(ctx: Ctx, req: Request): Promise<Respon
   const t1 = Date.now();
   if (!s.ok) return Response.json({ ok: false, error: s.code, ms: t1 - t0 });
   if (q("audio") === "1") return new Response(s.ogg as unknown as BodyInit, { headers: { "content-type": "audio/ogg; codecs=opus", "cache-control": "no-store" } });
-  const out: Json = { ok: true, lang, model: ctx.cfg.voiceTtsModel, where, tts_and_encode_ms: t1 - t0, tts_bytes: s.ttsBytes, ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, mono_ogg_opus: isMonoOggOpus(s.ogg) };
+  const el = s.provider === "elevenlabs";
+  const out: Json = { ok: true, lang, provider: s.provider ?? "workers-ai", model: el ? ctx.cfg.elevenlabsModelId : s.provider === "xai" ? `xai:${ctx.cfg.xaiTtsVoice}` : ctx.cfg.voiceTtsModel, where: el ? "worker" : where, tts_and_encode_ms: t1 - t0, tts_bytes: s.ttsBytes, ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, mono_ogg_opus: isMonoOggOpus(s.ogg) };
   if (q("upload") === "1") {
     if (!pn || !ctx.cfg.waAccessToken) return Response.json({ ...out, ok: false, error: "needs_phone_number_id_and_token" });
     const up = await uploadVoice(ctx, pn, s.ogg);
@@ -371,6 +399,6 @@ export async function adminVoiceSelftest(ctx: Ctx, req: Request): Promise<Respon
     } catch { /* reported as nulls */ }
     out.upload = { media_id_returned: true, meta_mime_type: typeof meta.mime_type === "string" ? meta.mime_type : null, meta_file_size: typeof meta.file_size === "number" ? meta.file_size : null, ms: Date.now() - t1 };
   }
-  ctx.log("admin", { action: "voice_selftest", where, ok: true });
+  ctx.log("admin", { action: "voice_selftest", where, provider: s.provider ?? "workers-ai", ogg_bytes: s.ogg.length, ok: true });
   return Response.json(out);
 }

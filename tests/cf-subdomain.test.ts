@@ -173,3 +173,15 @@ test("cli deploy: the embedded program registers the subdomain BEFORE the upload
   const calls = a.err.split("CALLS ")[1];
   assert.ok(calls.indexOf("PUT /accounts/acc123/workers/subdomain") < calls.indexOf("PUT /accounts/acc123/workers/scripts/wab-bot"), calls);
 });
+
+test("cli deploy: refuses to upload over an existing Worker of the same name (maybe another bot) unless --update; check-name exit codes", async () => {
+  const base = ["--subdomain", "acme-wa", "--no-nonce", "--self-provision", "--secrets-file", "/dev/null", "--bundle", "package.json"];
+  const a = await runCli(["deploy", "--name", "other-worker", ...base], "acme-wa");
+  assert.equal(a.code, 1);
+  assert.match(a.err, /already exists in this account \(maybe another bot\)/);
+  assert.doesNotMatch(a.err.split("CALLS ")[1] ?? "", /PUT \/accounts\/acc123\/workers\/scripts\/other-worker/, "nothing uploaded");
+  const b = await runCli(["deploy", "--name", "other-worker", "--update", ...base], "acme-wa");
+  assert.equal(b.code, 0, b.err);
+  assert.equal((await runCli(["check-name", "--name", "other-worker"], "acme-wa")).code, 3);
+  assert.equal((await runCli(["check-name", "--name", "wab-bot-new"], "acme-wa")).code, 0);
+});

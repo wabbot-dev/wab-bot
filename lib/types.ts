@@ -17,7 +17,7 @@ export interface Msg {
   media?: MediaInfo;
 }
 
-export type MediaKind = "audio" | "image";
+export type MediaKind = "audio" | "image" | "document";
 
 /** pending (job running) | done (text is a transcript/description) | skipped (cap or unavailable) | failed (download or Workers AI error) */
 export interface MediaInfo {
@@ -54,7 +54,7 @@ export interface OutRec {
   key: string;
   status: OutStatus;
   wamid?: string;
-  kind: "text" | "template" | "voice";
+  kind: "text" | "template" | "voice" | "media" | "interactive";
   /** who started the send: the agent's reply (default), a bot-started message (start_conversation) or a staff reply from the inbox */
   origin?: "reply" | "outreach" | "staff";
   template?: string;
@@ -89,7 +89,11 @@ export interface Conv {
   /** outbound records by reply key (capped) */
   outs: Record<string, OutRec>;
   wake: WakeState;
-  escalation?: { reason: string; at: number };
+  escalation?: { reason: string; at: number; category?: string };
+  /** a customer's "I paid" claim (PAYMENT_CHECK=staff): staff verify it in /admin; the agent never confirms a payment itself */
+  payment?: { status: "claimed" | "verified" | "rejected"; at: number; amount?: string; reference?: string; method?: string; decidedAt?: number };
+  /** requests passed to the owner's booking/order system (BOOKING_WEBHOOK_URL), newest last, max 20 */
+  requests?: { key: string; kind: string; at: number; ok: boolean; http?: number | "network"; reference?: string }[];
   hold?: { reason: string; at: number; replyKey?: string };
   /** set by an inbound STOP (or a staff action); START clears it. Every bot-started send is refused while set. */
   optOut?: { at: number; via: "customer" | "staff" };

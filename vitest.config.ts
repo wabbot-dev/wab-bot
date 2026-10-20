@@ -18,6 +18,9 @@ export default defineConfig({
           WAKE_URL: "https://wake.example.test/hook",
           WAKE_KEY: "test-wake-key-00000001",
           WAKE_DEBOUNCE_MS: "0",
+          // read receipts / typing are their own Meta call; the suite counts message sends only (tests/send-behaviour.test.ts covers them)
+          READ_RECEIPTS: "0",
+          TYPING_INDICATOR: "0",
           MCP_TOKEN: "test-mcp-token-0000001",
           ADMIN_TOKEN: "test-admin-token-00001",
           CRON_SECRET: "test-cron-secret-00001",

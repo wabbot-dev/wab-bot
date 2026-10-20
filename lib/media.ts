@@ -23,7 +23,25 @@ import { armedOf, runWake, type Armed } from "./wake";
 /** The slice of the Workers AI binding the bridge uses. */
 export interface AiRunner {
   run(model: string, input: Record<string, unknown>): Promise<unknown>;
+  /** Workers AI Markdown conversion (env.AI.toMarkdown): PDF, Office, CSV, HTML, text. Free for non-image files. */
+  toMarkdown?(files: { name: string; blob: Blob }[]): Promise<MarkdownResult[]>;
 }
+export interface MarkdownResult { name?: string; mimeType?: string; mimetype?: string; format?: string; tokens?: number; data?: string; error?: string }
+
+/** Document types whose text is extracted (toMarkdown converts them without a model, so they cost no Neurons). Images are not sent. */
+export const DOC_MIME: Record<string, string> = {
+  "application/pdf": "pdf",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
+  "application/vnd.ms-excel": "xls",
+  "application/vnd.oasis.opendocument.text": "odt",
+  "application/vnd.oasis.opendocument.spreadsheet": "ods",
+  "text/csv": "csv",
+  "text/plain": "txt",
+  "text/html": "html",
+  "application/xml": "xml",
+  "text/xml": "xml",
+};
 
 export { DEFAULT_STT_MODEL, DEFAULT_VISION_MODEL } from "./config";
 /** Workers AI free allocation (Workers Free and Paid alike), resets 00:00 UTC. https://developers.cloudflare.com/workers-ai/platform/pricing/ */
@@ -79,6 +97,15 @@ export interface MediaCounts {
   voice_send_rejected: number;
   voice_seconds: number;
   voice_chars: number;
+  /** of voice_sent: spoken by ElevenLabs (VOICE_REPLY_PROVIDER=elevenlabs); its seconds and characters (ElevenLabs bills per character) */
+  voice_el_sent: number;
+  voice_el_seconds: number;
+  voice_el_chars: number;
+  /** of voice_tts_failed: ElevenLabs answered with a quota, credit or rate limit (voice_tts_el_quota / _rate_limited) */
+  voice_el_quota: number;
+  /** inbound documents whose text was extracted (MEDIA_READ_DOCUMENTS) and their characters */
+  documents_read: number;
+  document_chars: number;
 }
 export interface MediaMetrics {
   /** UTC day of `today` (the Workers AI allowance resets at 00:00 UTC) */
@@ -94,7 +121,8 @@ export const zeroCounts = (): MediaCounts => ({
   transcribed: 0, described: 0, too_large: 0, download_failed: 0, ai_failed: 0, ai_quota_exhausted: 0, ai_paid_only: 0, unavailable: 0,
   audio_seconds: 0, vision_input_tokens: 0, vision_output_tokens: 0,
   voice_sent: 0, voice_fallback: 0, voice_tts_failed: 0, voice_encode_failed: 0, voice_upload_failed: 0, voice_language_unsupported: 0,
-  voice_send_rejected: 0, voice_seconds: 0, voice_chars: 0,
+  voice_send_rejected: 0, voice_seconds: 0, voice_chars: 0, voice_el_sent: 0, voice_el_seconds: 0, voice_el_chars: 0, voice_el_quota: 0,
+  documents_read: 0, document_chars: 0,
 });
 export const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
@@ -108,23 +136,28 @@ export interface MediaJob {
   /** Graph media id (webhook path) */
   mediaId?: string;
   mime?: string;
+  /** document file name as the customer sent it (shown to the agent, never used as a path) */
+  filename?: string;
   /** bytes supplied directly (owner self-test route only; never persisted) */
   bytes?: Uint8Array;
 }
 
 /** Fields of a Meta audio/image message object we read. */
-export interface RawMedia { id?: string; mime_type?: string; voice?: boolean; caption?: string }
+export interface RawMedia { id?: string; mime_type?: string; voice?: boolean; caption?: string; filename?: string }
 
-const label = (kind: MediaKind, voice: boolean) => (kind === "image" ? "image" : voice ? "voice note" : "audio");
+const label = (kind: MediaKind, voice: boolean) => (kind === "image" ? "image" : kind === "document" ? "document" : voice ? "voice note" : "audio");
+/** A file name safe to show: no paths, no control characters, at most 80 characters. */
+export const safeFilename = (n?: string) => (n ? n.replace(/[\u0000-\u001f\u007f[\]]/g, "").replace(/^.*[\\/]/, "").trim().slice(0, 80) : "");
+const docHead = (j: Pick<MediaJob, "filename">) => (safeFilename(j.filename) ? `document "${safeFilename(j.filename)}"` : "document");
 const withCaption = (head: string, caption?: string) => (caption ? `${head} caption: ${caption}` : head);
 
 /** Text stored while the job runs. */
-export const pendingText = (j: Pick<MediaJob, "kind" | "voice" | "caption">) =>
-  withCaption(j.kind === "image" ? "[image, description pending]" : `[${label("audio", j.voice)}, transcription pending]`, j.caption);
+export const pendingText = (j: Pick<MediaJob, "kind" | "voice" | "caption" | "filename">) =>
+  withCaption(j.kind === "image" ? "[image, description pending]" : j.kind === "document" ? `[${docHead(j)}, reading pending]` : `[${label("audio", j.voice)}, transcription pending]`, j.caption);
 
 /** Fallback text: what the agent sees when nothing could be understood. `why` is a short reason (never content). */
-export function fallbackText(j: Pick<MediaJob, "kind" | "voice" | "caption">, why?: string): string {
-  const head = j.kind === "image" ? "[image, not described" : `[${label("audio", j.voice)}, not transcribed`;
+export function fallbackText(j: Pick<MediaJob, "kind" | "voice" | "caption" | "filename">, why?: string): string {
+  const head = j.kind === "image" ? "[image, not described" : j.kind === "document" ? `[${docHead(j)}, not read` : `[${label("audio", j.voice)}, not transcribed`;
   return withCaption(`${head}${why ? `: ${why}` : ""}]`, j.caption);
 }
 
@@ -140,10 +173,24 @@ export function descriptionText(desc: string, caption?: string): string {
   return withCaption(caption ? `${head} |` : head, caption).slice(0, MAX_TEXT);
 }
 
+/** Workers AI's PDF conversion starts with a file title and a "## Metadata" list (PDF version, flags): no use to the agent, and it eats the cap. */
+export function stripDocMetadata(text: string): string {
+  return text.replace(/^\s*#\s[^\n]*\n+##\s*Metadata\n(?:[-*]\s[^\n]*\n?)*\s*(?:##\s*Contents\s*\n)?/, "").replace(/^###\s*Page 1\s*\n/, "");
+}
+
+export function documentText(j: Pick<MediaJob, "filename" | "caption">, text: string, max: number): string {
+  const t = stripDocMetadata(text.replace(/\r/g, "")).replace(/\n{3,}/g, "\n\n").trim();
+  if (!t) return withCaption(`[${docHead(j)}, read: no text found (a scan or photo?)]`, j.caption);
+  const cut = t.length > max;
+  const body = cut ? t.slice(0, max) : t;
+  return `${withCaption(`[${docHead(j)}, text extracted${cut ? `, first ${max} characters` : ""}]`, j.caption)}${j.caption ? " |" : ""} ${body}`.slice(0, MAX_TEXT);
+}
+
 /** Should this new inbound message be processed? (feature flag per kind) */
 export function wantsMedia(ctx: Ctx, type: string): MediaKind | null {
   if (type === "audio" && ctx.cfg.mediaTranscribe) return "audio";
   if (type === "image" && ctx.cfg.mediaDescribe) return "image";
+  if (type === "document" && ctx.cfg.mediaReadDocuments) return "document";
   return null;
 }
 
@@ -278,6 +325,23 @@ const VISION_PROMPT =
 
 async function understand(ctx: Ctx, j: MediaJob): Promise<Outcome> {
   const cfg = ctx.cfg;
+  if (j.kind === "document") {
+    const base = (j.mime ?? "").split(";")[0]!.trim().toLowerCase();
+    const ext = DOC_MIME[base];
+    if (!ext) throw new Fail("doc_type_unsupported", "this file type is not read", {});
+    if (!ctx.ai?.toMarkdown) throw new Fail("doc_unavailable", "", { unavailable: 1 });
+    const { bytes } = await download(ctx, j, cfg.mediaMaxDocBytes);
+    let res: MarkdownResult[];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Fail("ai_timeout", "", { ai_failed: 1 })), cfg.mediaTimeoutMs); });
+      res = await Promise.race([ctx.ai.toMarkdown([{ name: `document.${ext}`, blob: new Blob([bytes.slice().buffer as ArrayBuffer], { type: base }) }]), timeout]);
+    } finally { clearTimeout(timer); }
+    const r = Array.isArray(res) ? res[0] : undefined;
+    if (!r || r.format === "error" || typeof r.data !== "string") throw new Fail("doc_convert_failed", "could not read the file", { ai_failed: 1 });
+    const text = documentText(j, r.data, cfg.mediaMaxDocChars);
+    return { ok: true, text, media: { kind: "document", st: "done" }, count: { documents_read: 1, document_chars: Math.min(r.data.length, cfg.mediaMaxDocChars) } };
+  }
   const max = j.kind === "audio" ? cfg.mediaMaxAudioBytes : cfg.mediaMaxImageBytes;
   const { bytes, mime } = await download(ctx, j, max);
   if (j.kind === "audio") {
@@ -320,7 +384,7 @@ export async function processOne(ctx: Ctx, j: MediaJob): Promise<Outcome> {
   } catch (e) {
     const { code, count } = aiErrorCode(e);
     const why = e instanceof Fail ? e.why : "";
-    const st = code === "too_large" || code === "too_long" ? "skipped" : "failed";
+    const st = code === "too_large" || code === "too_long" || code === "doc_type_unsupported" ? "skipped" : "failed";
     return { ok: false, text: fallbackText(j, why || undefined), media: { kind: j.kind, st, reason: code }, count, code };
   }
 }

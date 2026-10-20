@@ -56,7 +56,7 @@ export async function armCalling(ctx: Ctx, a: ArmArgs, deps: ArmDeps): Promise<J
   // 2. checks + xAI registration
   let prep;
   try {
-    prep = await prepareArm(remote, { pnid, goNumber: cfg.callingMode === "live" ? cfg.callingGoNumber : undefined, webhookUrl: a.webhookUrl, label: "wab-bot-calling" });
+    prep = await prepareArm(remote, { pnid, goNumber: cfg.callingMode === "live" ? cfg.callingGoNumber : undefined, webhookUrl: a.webhookUrl, label: "wab-bot-calling", customTarget: cfg.callSipTarget.kind === "custom" });
   } catch {
     prep = { ok: false as const, step: "network_error" };
   }
@@ -74,7 +74,8 @@ export async function armCalling(ctx: Ctx, a: ArmArgs, deps: ArmDeps): Promise<J
 
   // 4. Meta calling ON
   let enabled = false;
-  try { enabled = (await enableMetaSip(remote, pnid, { sipWebhooks: cfg.callSipWebhooks })).ok; } catch { enabled = false; }
+  const target = cfg.callSipTarget.kind === "custom" ? { host: cfg.callSipTarget.host, port: cfg.callSipTarget.port } : undefined;
+  try { enabled = (await enableMetaSip(remote, pnid, { sipWebhooks: cfg.callSipWebhooks, target })).ok; } catch { enabled = false; }
   if (!enabled) {
     const d = await disarmCalling(ctx, "meta_enable_failed", deps);
     return { ok: false, error: "arm_failed", step: "meta_enable", disarmed: d.ok === true };
@@ -86,6 +87,8 @@ export async function armCalling(ctx: Ctx, a: ArmArgs, deps: ArmDeps): Promise<J
     armed_until: new Date(expiresAt).toISOString(),
     max_calls: a.maxCalls,
     number_hint: "…" + (prep.number as string).slice(-2),
+    sip_target: target ? "custom" : "xai",
+    ...(target ? { custom_target_note: "Calls go straight to your SIP voice agent: caller allowlist and call counting are up to that provider; this window still switches calling off on time." } : {}),
     note: "Calling is ON for this window only. It switches itself off after the last allowed call or when the window ends. Call the number from an allowed caller now.",
   };
 }

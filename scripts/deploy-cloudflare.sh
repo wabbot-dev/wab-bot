@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Deploy WAB bot to YOUR OWN Cloudflare account (Workers + a SQLite Durable Object).
 #
-#   bash scripts/deploy-cloudflare.sh [--name <worker-name>] [--subdomain <name>] [--dry-run] [--no-secrets]
+#   bash scripts/deploy-cloudflare.sh [--slug <business> | --name <worker-name>] [--subdomain <name>] [--dry-run] [--no-secrets] [--update]
+#     --slug acme gives the Worker the name wab-bot-acme: one Worker per bot, so a second bot never lands on the first one.
+#     Before deploying, the script checks whether a Worker of that name already exists in the account. If it does and this folder did
+#     not create it (no .deploy/<name>.* file), it REFUSES: that Worker may be another bot. --update deploys over it on purpose.
 #   bash scripts/deploy-cloudflare.sh --set-secret WA_APP_SECRET        # add/rotate ONE secret later (hidden prompt)
 #   bash scripts/deploy-cloudflare.sh --self-provision [--name N]       # NO `wrangler secret put`: the Worker receives its secrets once, itself
 #
@@ -24,16 +27,18 @@ set -Eeuo pipefail
 umask 077
 cd "$(dirname "$0")/.."
 
-NAME=""; SUBDOMAIN=""; DRY=0; NOSECRETS=0; ONLY=""; SELF=0
+NAME=""; SLUG=""; SUBDOMAIN=""; DRY=0; NOSECRETS=0; ONLY=""; SELF=0; UPDATE=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --name) NAME="${2:?--name needs a value}"; shift 2 ;;
+    --slug) SLUG="${2:?--slug needs a value}"; shift 2 ;;
+    --update) UPDATE=1; shift ;;
     --subdomain) SUBDOMAIN="${2:?--subdomain needs a value}"; shift 2 ;;
     --dry-run) DRY=1; shift ;;
     --no-secrets) NOSECRETS=1; shift ;;
     --self-provision) SELF=1; shift ;;
     --set-secret) ONLY="${2:?--set-secret needs a secret name}"; shift 2 ;;
-    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,30p' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
 done
@@ -56,6 +61,11 @@ command -v node >/dev/null || die "Node.js >= 20 is required"
 command -v openssl >/dev/null || die "openssl is required (used to generate random tokens)"
 
 TOML_NAME="$(sed -n 's/^name *= *"\([^"]*\)".*/\1/p' wrangler.toml | head -1)"
+if [ -n "$SLUG" ]; then
+  [ -z "$NAME" ] || die "use --slug OR --name, not both"
+  [[ "$SLUG" =~ ^[a-z0-9]([a-z0-9-]{0,40}[a-z0-9])?$ ]] || die "--slug must be lowercase letters, digits and dashes (got '$SLUG')"
+  NAME="wab-bot-$SLUG"
+fi
 NAME="${NAME:-$TOML_NAME}"
 [[ "$NAME" =~ ^[a-z0-9][a-z0-9-]{0,52}[a-z0-9]$ ]] || die "worker name must be lowercase letters, digits and dashes (got '$NAME')"
 NAME_ARGS=(--name "$NAME")
@@ -63,7 +73,7 @@ NAME_ARGS=(--name "$NAME")
 
 GEN_SECRETS=(MCP_TOKEN ADMIN_TOKEN CRON_SECRET WA_VERIFY_TOKEN)
 META_SECRETS=(WA_APP_SECRET WA_ACCESS_TOKEN)
-ALLOWED=" ${GEN_SECRETS[*]} ${META_SECRETS[*]} WAKE_KEY WAKE_URL XAI_API_KEY ADMIN_MCP_TOKEN "
+ALLOWED=" ${GEN_SECRETS[*]} ${META_SECRETS[*]} WAKE_KEY WAKE_URL XAI_API_KEY ELEVENLABS_API_KEY ADMIN_MCP_TOKEN ALERT_WEBHOOK_KEY BOOKING_WEBHOOK_KEY "
 
 if [ "$DRY" = 1 ] && [ "$SELF" = 1 ]; then
   say "DRY RUN (no Cloudflare call, nothing written). Self-provisioning plan for Worker '$NAME':"
@@ -129,9 +139,35 @@ ensure_subdomain() {
   node scripts/cf-api-deploy.mjs subdomain "${sub_args[@]}" || die "could not make sure the account has a workers.dev subdomain (see above); nothing was deployed"
 }
 
+# One Worker per bot. A Worker of this name that this folder did not create may be ANOTHER bot (each has its own conversations, tokens
+# and number): refuse unless --update. "Created here" = a .deploy/<name>.secrets.env, .setup.env or .owner file in this folder.
+owned_here() { [ -f ".deploy/$NAME.secrets.env" ] || [ -f ".deploy/$NAME.setup.env" ] || [ -f ".deploy/$NAME.owner" ]; }
+worker_exists() { # prints exists | absent | unknown
+  if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ACCOUNT_ID:-}" ]; then
+    local rc=0; node scripts/cf-api-deploy.mjs check-name --name "$NAME" >/dev/null 2>&1 || rc=$?
+    case "$rc" in 0) echo absent ;; 3) echo exists ;; *) echo unknown ;; esac; return 0
+  fi
+  local out rc=0; out="$(WR deployments list --name "$NAME" 2>&1)" || rc=$?
+  if [ "$rc" = 0 ]; then echo exists
+  elif printf '%s' "$out" | grep -qiE '10007|does not exist|not found'; then echo absent
+  else echo unknown; fi
+}
+check_name() {
+  [ "$NAME" != "$TOML_NAME" ] || [ -n "$SLUG" ] || say "Note: using the default Worker name '$NAME'. For a second bot in the same Cloudflare account use --slug <business> (wab-bot-<business>)."
+  owned_here && return 0
+  [ "$UPDATE" = 1 ] && { say "--update: deploying over the existing Worker '$NAME' on purpose."; return 0; }
+  case "$(worker_exists)" in
+    absent) return 0 ;;
+    exists) die "a Worker named '$NAME' already exists in this Cloudflare account and was not created from this folder: it may be ANOTHER bot. Nothing was deployed. Pick a unique name (--slug <business>), or pass --update if '$NAME' is this bot." ;;
+    *) die "could not check whether a Worker named '$NAME' already exists (see the login above). Nothing was deployed. Pass --update only if you are sure '$NAME' is this bot or does not exist yet." ;;
+  esac
+}
+mark_owned() { mkdir -p .deploy; chmod 700 .deploy; printf 'worker=%s\ncreated_from_this_folder=%s\n' "$NAME" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > ".deploy/$NAME.owner"; }
+
 if [ "$SELF" = 1 ]; then
   login_if_needed
   ensure_subdomain
+  check_name
   mkdir -p .deploy; chmod 700 .deploy
   F=".deploy/$NAME.setup.env"
   node scripts/cf-api-deploy.mjs init --secrets-file "$F" --from-env
@@ -152,6 +188,7 @@ if [ "$SELF" = 1 ]; then
   say "Deploying Worker '$NAME' with only a one-time setup nonce (no secret bindings)..."
   OUT="$(mktemp)"; trap 'rm -f "$OUT"' EXIT
   WR deploy "${NAME_ARGS[@]}" --var "SETUP_NONCE:$NONCE" 2>&1 | tee "$OUT"
+  mark_owned
   URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' "$OUT" | head -1 || true)"
   [ -n "$URL" ] || die "could not find the workers.dev URL in the wrangler output"
   sleep 3
@@ -174,10 +211,12 @@ fi
 
 login_if_needed
 ensure_subdomain
+check_name
 
 say "Deploying Worker '$NAME' (free plan; workers.dev URL; no custom domain)..."
 OUT="$(mktemp)"; trap 'rm -f "$OUT"' EXIT
 WR deploy "${NAME_ARGS[@]}" 2>&1 | tee "$OUT"
+mark_owned
 URL="$(grep -Eo 'https://[A-Za-z0-9.-]+\.workers\.dev' "$OUT" | head -1 || true)"
 
 if [ "$NOSECRETS" = 0 ]; then

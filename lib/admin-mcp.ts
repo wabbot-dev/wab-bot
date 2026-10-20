@@ -1,3 +1,4 @@
+import { deleteContact, listContacts, upsertContact } from "./business";
 import pkg from "../package.json" with { type: "json" };
 import { armCalling, ARM_MAX_CALLS, ARM_MAX_MINUTES, ARM_MIN_MINUTES, disarmCalling, type ArmDeps } from "./calls-arm";
 import { readMetaCalling } from "./calls-remote";
@@ -166,7 +167,7 @@ export const ADMIN_TOOLS: Tool[] = [
         read_only: true,
         config_present: {
           WA_ACCESS_TOKEN: !!cfg.waAccessToken, WA_APP_SECRET: !!cfg.waAppSecret, WA_VERIFY_TOKEN: !!cfg.waVerifyToken, MCP_TOKEN: !!cfg.mcpToken,
-          ADMIN_TOKEN: !!cfg.adminToken, CRON_SECRET: !!cfg.cronSecret, WAKE_URL: !!cfg.wakeUrl, WAKE_KEY: !!cfg.wakeKey, XAI_API_KEY: !!cfg.xaiApiKey,
+          ADMIN_TOKEN: !!cfg.adminToken, CRON_SECRET: !!cfg.cronSecret, WAKE_URL: !!cfg.wakeUrl, WAKE_KEY: !!cfg.wakeKey, XAI_API_KEY: !!cfg.xaiApiKey, ELEVENLABS_API_KEY: !!cfg.elevenlabsApiKey, ALERT_WEBHOOK_KEY: !!cfg.alertWebhookKey, BOOKING_WEBHOOK_KEY: !!cfg.bookingWebhookKey,
           ADMIN_MCP_TOKEN: true, phone_number_ids: cfg.phoneNumberIds.length,
         },
         controls: ov.controls,
@@ -200,7 +201,7 @@ export const ADMIN_TOOLS: Tool[] = [
       add("CRON_SECRET", !!cfg.cronSecret && cfg.cronSecret.length >= 16, "recommended", "Set CRON_SECRET if you call the retry endpoint over HTTP.");
       add("WAKE_URL", !!cfg.wakeUrl, "required", "Set WAKE_URL (https) where the content-free wake goes; without it the agent is never woken.");
       add("WAKE_KEY", !!cfg.wakeKey, "recommended", "Set WAKE_KEY if your wake endpoint needs a key.");
-      add("WA_PHONE_NUMBER_IDS", cfg.phoneNumberIds.length > 0, "recommended", "Restrict the bridge to your phone number id(s).");
+      add("WA_PHONE_NUMBER_IDS", cfg.phoneNumberIds.length > 0 || cfg.acceptAnyPhoneNumber, "required", "List your phone number id(s): with none, the bridge answers no number (meta-setup stores the setup number for you).");
       // Read-only Graph GET (no write): is the owner's app subscribed to the WABA? The usual cause of "the first message never arrives".
       let subscribed: { checked: boolean; app_ids_count?: number; own_app_listed?: boolean | null; error?: string } = { checked: false };
       if (cfg.wabaId && cfg.waAccessToken) {
@@ -284,6 +285,34 @@ export const ADMIN_TOOLS: Tool[] = [
       const r = await eraseConversationResult(ctx, a.conversation_id as string, "admin_mcp");
       return r.body;
     },
+  }),
+  tool({
+    name: "directory_list",
+    description: "The owner's contact/account directory (business mode, docs/BUSINESS-MODE.md): last 4 digits, account, person, tags, known_account, whether terms/notes are set. Filter by tag or known.",
+    spec: { tag: { type: "string", max: 40, description: "Only entries with this tag." }, known: { type: "boolean", description: "Only known accounts (true) or only others (false)." }, ...LIST_SPEC },
+    run: async (ctx, a) => listContacts(ctx, { tag: a.tag as string | undefined, known: a.known as boolean | undefined, offset: a.offset as number, limit: a.limit as number }),
+  }),
+  tool({
+    name: "directory_upsert",
+    description: "Add or update one directory entry by WhatsApp number (digits with country code). The agent sees it as trusted owner data for that number: known_account unlocks account terms and private documents after the identity check. Fields not given are kept.",
+    ro: false,
+    spec: {
+      number: { type: "string", required: true, max: 21, pattern: /^\+?[0-9]{6,20}$/, patternText: "digits with country code", description: "WhatsApp number, digits with country code." },
+      account: { type: "string", max: 100, description: "Account / company name." },
+      person: { type: "string", max: 100, description: "Contact person." },
+      tags: { type: "string", max: 300, description: "Comma-separated tags, e.g. wholesale,net30." },
+      known_account: { type: "boolean", description: "An existing business account." },
+      terms: { type: "string", max: 300, description: "Account terms for the agent (price list, credit, payment terms)." },
+      notes: { type: "string", max: 500, description: "Short owner note for the agent." },
+    },
+    run: async (ctx, a) => upsertContact(ctx, a),
+  }),
+  tool({
+    name: "directory_delete",
+    description: "Remove one directory entry (the number becomes an unknown contact again). Conversations are not touched.",
+    ro: false, destructive: true,
+    spec: { number: { type: "string", required: true, max: 21, pattern: /^\+?[0-9]{6,20}$/, patternText: "digits with country code", description: "WhatsApp number, digits with country code." } },
+    run: async (ctx, a) => deleteContact(ctx, a.number),
   }),
   tool({
     name: "calling_status",
@@ -494,7 +523,7 @@ function transcriptOut(t: CallTranscript, l: CallLog, reveal: boolean) {
 export function scrub(ctx: Ctx, value: unknown): unknown {
   const red = new Redactor();
   const c = ctx.cfg;
-  for (const s of [c.waAccessToken, c.waAppSecret, c.waVerifyToken, c.mcpToken, c.adminToken, c.cronSecret, c.wakeKey, c.xaiApiKey, c.adminMcpToken]) red.add(s);
+  for (const s of [c.waAccessToken, c.waAppSecret, c.waVerifyToken, c.mcpToken, c.adminToken, c.cronSecret, c.wakeKey, c.xaiApiKey, c.elevenlabsApiKey, c.adminMcpToken, c.alertWebhookKey, c.bookingWebhookKey]) red.add(s);
   const text = red.redact(JSON.stringify(value));
   return JSON.parse(text);
 }

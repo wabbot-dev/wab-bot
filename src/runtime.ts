@@ -1,5 +1,6 @@
 import { loadConfig, type Env as ConfigEnv } from "../lib/config";
 import type { SpeakResult } from "../lib/voice-reply";
+import type { MarkdownResult } from "../lib/media";
 import { encodeInIsolate } from "./voice-wasm";
 import type { Ctx, VolatileState } from "../lib/ctx";
 import { newVolatileState } from "../lib/ctx";
@@ -57,7 +58,13 @@ export function getCtx(env: Env, exec: Pick<ExecutionContext, "waitUntil">): Ctx
     // this request (10 ms CPU on Workers Free); only the finished Ogg file (tens of KB) comes back.
     speakVoice: (a) => env.CALLS.get(env.CALLS.idFromName("voice-note-encoder")).speakVoice(a) as Promise<SpeakResult>,
     encodeVoiceInline: encodeInIsolate,
-    ai: env.AI ? { run: (model, input) => env.AI!.run(model as Parameters<Ai["run"]>[0], input as never) as Promise<unknown> } : undefined,
+    ai: env.AI
+      ? {
+          run: (model, input) => env.AI!.run(model as Parameters<Ai["run"]>[0], input as never) as Promise<unknown>,
+          // documents (PDF, Office, CSV, text) to Markdown: free for non-image files (developers.cloudflare.com/workers-ai/features/markdown-conversion)
+          toMarkdown: (files) => (env.AI as unknown as { toMarkdown(f: { name: string; blob: Blob }[]): Promise<unknown> }).toMarkdown(files) as Promise<MarkdownResult[]>,
+        }
+      : undefined,
     state: s.state,
   };
 }

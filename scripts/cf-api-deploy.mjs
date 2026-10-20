@@ -14,6 +14,8 @@
 //   node scripts/cf-api-deploy.mjs subdomain --name NAME [--subdomain SUB]                              (only make sure the account has a workers.dev subdomain)
 //   node scripts/cf-api-deploy.mjs verify    --url https://NAME.SUB.workers.dev --secrets-file F [--phone ID]
 //   node scripts/cf-api-deploy.mjs teardown  --name NAME [--emit-plugin-js OUT.js]
+//   node scripts/cf-api-deploy.mjs check-name --name NAME                                               (exit 0 free, 3 a Worker of that name exists)
+// deploy refuses to upload over an existing Worker of the same name (it may be another bot) unless --update is given.
 //
 // workers.dev subdomain: a brand-new Cloudflare account has none, so `deploy` first does GET /accounts/{id}/workers/subdomain and, only if
 //   none is registered, PUT /accounts/{id}/workers/subdomain with "<worker name>-<6 random hex>" (new suffix on a name clash, a few tries) or
@@ -45,9 +47,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureSubdomain } from "./cf-subdomain.mjs";
 
-const SECRET_NAMES = ["WA_APP_SECRET", "WA_VERIFY_TOKEN", "MCP_TOKEN", "ADMIN_TOKEN", "CRON_SECRET", "WA_ACCESS_TOKEN", "WAKE_KEY", "XAI_API_KEY"];
+const SECRET_NAMES = ["WA_APP_SECRET", "WA_VERIFY_TOKEN", "MCP_TOKEN", "ADMIN_TOKEN", "CRON_SECRET", "WA_ACCESS_TOKEN", "WAKE_KEY", "XAI_API_KEY", "ELEVENLABS_API_KEY", "ALERT_WEBHOOK_KEY", "BOOKING_WEBHOOK_KEY"];
 const VAR_NAMES = ["LAUNCH_MODE", "WA_PHONE_NUMBER_IDS", "WAKE_URL", "WAKE_DEBOUNCE_MS", "META_SETUP_ENABLED", "MAX_MESSAGES", "WAKE_TYPES", "WAKE_AUTH", "WAKE_HEADER", "STALE_WAKE_MS",
-  "CALLING_MODE", "CALLING_GO_NUMBER", "CALLING_BV_DONE", "CALLING_PHONE_NUMBER_ID", "CALL_ALLOWED_CALLERS", "CALL_MAX_SECONDS", "CALL_BUDGET_SECONDS", "CALL_VOICE", "CALL_LANGUAGE_HINT", "CALL_DISCLOSE_AI", "CALL_SIP_WEBHOOKS", "CALL_RECORDING_LINE", "CALL_TRANSCRIPTS", "CALL_TRANSCRIPT_RETENTION_DAYS", "CALL_BUSINESS_NAME", "CALL_GREETING", "CALL_INSTRUCTIONS"];
+  "CALLING_MODE", "CALLING_GO_NUMBER", "CALLING_BV_DONE", "CALLING_PHONE_NUMBER_ID", "CALL_ALLOWED_CALLERS", "CALL_MAX_SECONDS", "CALL_BUDGET_SECONDS", "CALL_VOICE", "CALL_LANGUAGE_HINT", "CALL_DISCLOSE_AI", "CALL_SIP_WEBHOOKS", "CALL_RECORDING_LINE", "CALL_TRANSCRIPTS", "CALL_TRANSCRIPT_RETENTION_DAYS", "CALL_BUSINESS_NAME", "CALL_GREETING", "CALL_INSTRUCTIONS",
+  "VOICE_REPLIES", "VOICE_TTS_MODEL", "VOICE_MAX_CHARS", "VOICE_MAX_SECONDS", "VOICE_TIMEOUT_MS", "VOICE_REPLY_PROVIDER", "ELEVENLABS_VOICE_ID", "ELEVENLABS_MODEL_ID", "ELEVENLABS_MAX_CHARS", "VOICE_STYLE_TAG", "VOICE_PRONUNCIATIONS", "XAI_TTS_VOICE", "XAI_TTS_ARABIC_LOCALE", "ARABIC_REPLY_DIALECT",
+  "MEDIA_READ_DOCUMENTS", "MEDIA_MAX_DOC_BYTES", "MEDIA_MAX_DOC_CHARS", "SEND_RETRIES", "SEND_RETRY_BASE_MS", "READ_RECEIPTS", "TYPING_INDICATOR",
+  "ALERT_WEBHOOK_URL", "ALERT_WHATSAPP_TO", "ALERT_TEMPLATE", "ALERT_TEMPLATE_LANGUAGE", "ALERT_EVENTS", "ALERT_ADMIN_URL", "OUTBOUND_MEDIA_HOSTS",
+  "BUSINESS_MODE", "BOT_LANGUAGE", "IDENTITY_CHECK", "CUSTOMER_DETAILS", "BOOKING_WEBHOOK_URL", "PAYMENT_CHECK", "CALL_SIP_TARGET"];
 const SETTING_NAMES = ["LAUNCH_MODE", "TEST_RECIPIENTS", "WA_PHONE_NUMBER_IDS", "WA_TEMPLATE_ALLOWLIST", "WAKE_URL", "WAKE_HEADER", "WAKE_AUTH", "WAKE_DEBOUNCE_MS", "WAKE_TYPES", "GRAPH_VERSION"];
 const MANAGED = [...SECRET_NAMES, ...SETTING_NAMES];
 const NAME_RE = /^[a-z0-9][a-z0-9-]{0,52}[a-z0-9]$/;
@@ -58,7 +64,7 @@ function parseArgs(argv) {
     const a = argv[i];
     if (!a.startsWith("--")) { o._.push(a); continue; }
     const k = a.slice(2);
-    if (k === "self-provision" || k === "from-env" || k === "no-nonce" || k === "purge-secret-bindings") { o[k] = "1"; continue; }
+    if (k === "self-provision" || k === "from-env" || k === "no-nonce" || k === "purge-secret-bindings" || k === "update") { o[k] = "1"; continue; }
     const v = argv[++i];
     if (v === undefined) die(`--${k} needs a value`);
     if (k === "var") o.var.push(v);
@@ -114,6 +120,8 @@ const DEPLOY = `async (cloudflare, accountId, input) => {
   if (!sdr.ok) return { ok: false, step: 'subdomain', error: sdr.error };
   const before = await cloudflare.request({ method: 'GET', path: base + '/scripts' });
   const exists = (before.result || []).some((s) => s.id === input.name);
+  // one Worker per bot: never upload over an existing Worker (maybe another bot) unless the caller says it is this bot (--update)
+  if (exists && !input.update) return { ok: false, step: 'name_check', error: 'a Worker named ' + input.name + ' already exists in this account (maybe another bot); nothing was uploaded. Pick a unique name (wab-bot-<business>) or pass --update if it is this bot' };
   const metadata = { ...input.metadata };
   // v1 = the state object; v2 = the per-call object (voice calling). A new script gets both at once. An existing script gets the
   // missing step: input.migrateFrom is the tag it already has ('v1' for deployments made before voice calling existed; leave unset for v2).
@@ -316,7 +324,16 @@ else if (cmd === "subdomain") {
   const flags = JSON.parse("[" + tomlValue(/compatibility_flags\s*=\s*\[([^\]]*)\]/, '"nodejs_compat"') + "]");
   if (o.flags) for (const f of o.flags.split(",")) if (!flags.includes(f)) flags.push(f); // test-only override
   const metadata = { main_module: "worker.js", compatibility_date: tomlValue(/compatibility_date\s*=\s*"([^"]+)"/, "2026-10-01"), compatibility_flags: flags, bindings, observability: { enabled: true } };
-  await run(DEPLOY, { name: o.name, code: build(o.bundle), metadata, purge: o["purge-secret-bindings"] !== undefined ? SECRET_NAMES : [], subdomain: o.subdomain, cron: o.cron ? o.cron.split(";").map((x) => x.trim()).filter(Boolean) : [], migrateFrom: o["migrate-from"] }, o);
+  await run(DEPLOY, { name: o.name, code: build(o.bundle), metadata, purge: o["purge-secret-bindings"] !== undefined ? SECRET_NAMES : [], subdomain: o.subdomain, cron: o.cron ? o.cron.split(";").map((x) => x.trim()).filter(Boolean) : [], migrateFrom: o["migrate-from"], update: o.update !== undefined }, o);
+} else if (cmd === "check-name") {
+  // exit 0 = no Worker of that name in the account, 3 = one exists, 1 = could not check (deploy-cloudflare.sh uses this before deploying)
+  if (!NAME_RE.test(o.name || "")) die("--name must be lowercase letters, digits and dashes");
+  const { cloudflare, accountId } = restShim();
+  const r = await cloudflare.request({ method: "GET", path: "/accounts/" + accountId + "/workers/scripts" });
+  if (!r.success) die("could not list the account's Workers (" + r.status + ")");
+  const exists = (r.result || []).some((s) => s.id === o.name);
+  console.log(exists ? "exists" : "absent");
+  process.exit(exists ? 3 : 0);
 } else if (cmd === "teardown") {
   if (!NAME_RE.test(o.name || "")) die("--name must be lowercase letters, digits and dashes");
   await run(TEARDOWN, { name: o.name }, o);

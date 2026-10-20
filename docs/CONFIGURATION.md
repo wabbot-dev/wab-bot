@@ -48,7 +48,7 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 
 | Name | Purpose |
 |---|---|
-| `WA_PHONE_NUMBER_IDS` | accepted phone number ids (empty = any id on the app; the signature is still required). Recommended |
+| `WA_PHONE_NUMBER_IDS` | **Required.** The phone number ids this deployment serves, comma separated. Empty = **no** number is answered (fail closed; the setup route stores the setup number). `*` = any number on the Meta app (only when one bot serves the whole app) |
 | `WA_TEMPLATE_ALLOWLIST` | approved template names the agent may send (empty = none) |
 | `WA_WABA_ID` | your WhatsApp Business Account id: lets `start_conversation` address a number by `to`, and lets the admin MCP `setup_check` read the WABA's subscribed apps (read-only) |
 | `WA_APP_ID` | optional: your Meta app id, so `setup_check` confirms that exactly your app is subscribed to the WABA |
@@ -56,8 +56,10 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 | `GRAPH_VERSION` | default `v25.0` |
 | `LAUNCH_MODE`, `TEST_RECIPIENTS` | `live` or test (default test); numbers allowed in test mode |
 | `WAKE_URL` (**https only**, `http://localhost` for dev), `WAKE_KEY`, `WAKE_HEADER`, `WAKE_AUTH` (`bearer`/`header`) | where the content-free wake goes |
-| `WAKE_DEBOUNCE_MS` (0-25000, default 8000), `WAKE_TYPES` | wake timing and which inbound types wake |
-| `LEASE_MS`, `RATE_CONV_MAX`, `RATE_CONV_WINDOW_MS`, `RATE_GLOBAL_PER_HOUR`, `SEND_TIMEOUT_MS`, `MAX_MESSAGES`, `STALE_WAKE_MS` | tuning (defaults in `lib/config.ts`) |
+| `WAKE_DEBOUNCE_MS` (0-25000, default 3000), `WAKE_TYPES` | wake timing (the reply delay after the first message of a burst) and which inbound types wake |
+| `LEASE_MS`, `RATE_CONV_MAX` (default 8), `RATE_CONV_WINDOW_MS` (default 10 min), `RATE_GLOBAL_PER_HOUR` (default 300), `SEND_TIMEOUT_MS`, `MAX_MESSAGES`, `STALE_WAKE_MS` | tuning (defaults in `lib/config.ts`). The bridge's own limits sit well below Meta's (80 messages per second per number; about one message every 6 s to the same user) |
+| `SEND_RETRIES` (0-4, default 2), `SEND_RETRY_BASE_MS` (default 1000) | after a rate-limited send (HTTP 429 or Meta codes 4, 80007, 130429, 131056) the bridge waits 1 s, then 3 s, and tries again; still limited = `send_rate_limited` (nothing sent, `retryable: true`), never held for review |
+| `READ_RECEIPTS`, `TYPING_INDICATOR` (default on) | when the agent claims a conversation it may answer (live mode, or an allowlisted test recipient), the customer's latest message gets blue ticks and "typing..." (Meta removes it when the reply arrives or after 25 s). `0` turns either off |
 | `SETUP_NONCE` (plain-text var, not a secret) | one-time key for `POST /api/setup`; >= 32 chars; unset or short = setup disabled |
 | `META_SETUP_ENABLED`, `META_SETUP_DRY_RUN` | meta-setup route gate (default off) and its offline stub |
 | `MEDIA_TRANSCRIBE`, `MEDIA_DESCRIBE` (default **on**; `0`/`false`/`no`/`off` = off) | transcribe inbound voice notes / describe inbound images with Workers AI (the `AI` binding in `wrangler.toml`); off = type and caption only, as before ([MEDIA.md](MEDIA.md)) |
@@ -65,8 +67,24 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 | `MEDIA_STT_MODEL`, `MEDIA_VISION_MODEL` | Workers AI model names (default `@cf/openai/whisper-large-v3-turbo`, `@cf/meta/llama-4-scout-17b-16e-instruct`) |
 | `MEDIA_SELFTEST` | `1` mounts the owner-only `POST /api/admin/media-selftest` and `POST /api/admin/voice-selftest` (default off: 404) |
 | `VOICE_REPLIES` | Optional voice-note replies ([VOICE-REPLIES.md](VOICE-REPLIES.md)): `off` (default), `mirror` (recommended: speak only when the customer's latest message was a voice note) or `on` (also on `reply_as: "voice"`) |
-| `VOICE_TTS_MODEL` | Workers AI text-to-speech model (default `@cf/myshell-ai/melotts`: English, French, Spanish, Chinese, Japanese, Korean; no Arabic) |
+| `VOICE_TTS_MODEL` | Workers AI text-to-speech model (default `@cf/myshell-ai/melotts`: English, French, Spanish, Chinese, Japanese, Korean; no Arabic, see `VOICE_REPLY_PROVIDER`) |
 | `VOICE_MAX_CHARS`, `VOICE_MAX_SECONDS`, `VOICE_TIMEOUT_MS` | Caps (default 400 characters, 45 s of audio) and the text-to-speech timeout (default 15000 ms); over a cap the text is sent |
+| `VOICE_REPLY_PROVIDER` | `workers-ai` (default), `xai` (your xAI key, as for calls) or `elevenlabs` (your ElevenLabs voice): Arabic, and languages the Workers AI model lacks, are spoken by that provider ([VOICE-REPLIES.md](VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)) |
+| `BUSINESS_MODE`, `BOT_LANGUAGE` | `consumers` (default), `businesses` or `both`; `auto` or preferred language codes ([BUSINESS-MODE.md](BUSINESS-MODE.md)) |
+| `IDENTITY_CHECK`, `CUSTOMER_DETAILS` | `none` / `known_number` / `details`; fields the agent collects before orders and account requests |
+| `PAYMENT_CHECK` | `staff`: staff-verified payment claims (default off) |
+| `BOOKING_WEBHOOK_URL`, `BOOKING_WEBHOOK_KEY` (secret) | The bookings/orders hook and its Bearer key |
+| `CALL_SIP_TARGET` | `xai` (default) or another voice agent's SIP `host[:port]` ([VOICE-CALLS.md](VOICE-CALLS.md#another-voice-agent-callsiptarget)) |
+| `OUTBOUND_MEDIA_HOSTS` | If set, documents and images sent by URL must come from these hosts ([OUTBOUND.md](OUTBOUND.md)) |
+| `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_KEY` (secret) | Instant alert webhook (https) and its Bearer key ([ALERTS.md](ALERTS.md)) |
+| `ALERT_WHATSAPP_TO`, `ALERT_TEMPLATE`, `ALERT_TEMPLATE_LANGUAGE` | Owner/staff numbers for WhatsApp alerts; approved template (one body parameter), language (default `en`) |
+| `ALERT_EVENTS`, `ALERT_ADMIN_URL` | Which events alert (default all: `escalation`, `payment_claimed`, `booking_failed`, `test`); admin link in the webhook body |
+| `XAI_TTS_VOICE`, `XAI_TTS_ARABIC_LOCALE` | xAI voice (default `eve`, or a custom voice id) and Arabic locale (`ar-EG`, `ar-SA`, `ar-AE`; default from the dialect preset) |
+| `ELEVENLABS_API_KEY` | Secret (stdin only). ElevenLabs key scoped to Text to Speech plus Voices read; sent only to `api.elevenlabs.io` |
+| `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_MAX_CHARS` | The voice; the model (default `eleven_v4`); the cap (default 600 characters, longer replies go as text) |
+| `VOICE_STYLE_TAG` | Optional direction for tag-aware ElevenLabs models (`eleven_v3` / `eleven_v4`), e.g. `warm, friendly`; unset = none |
+| `VOICE_PRONUNCIATIONS` | Optional `written => spoken` list applied to the spoken copy only ([VOICE-REPLIES.md](VOICE-REPLIES.md#pronunciation-list)) |
+| `ARABIC_REPLY_DIALECT` | `none` (default), `msa`, `lebanese`, `gulf` or `egyptian`: the wording hint `get_history` gives the agent for spoken Arabic replies ([VOICE-REPLIES.md](VOICE-REPLIES.md#arabic-dialect-presets)) |
 
 ### Admin MCP and voice calling (bindings and vars; none of the gate settings can be set through any route or tool)
 

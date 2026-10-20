@@ -34,6 +34,7 @@ shift # --no-install
 shift # wrangler
 case "$1 $2" in
   "secret put") cat >/dev/null; echo "$3" >> "${log}" ;;
+  "deployments list") echo "This Worker does not exist on your account. [code: 10007]" >&2; exit 1 ;;
   deploy*) echo "wrangler-deploy" >> "${dir}/order.log"; echo "Deployed https://wab-test-bot.example-sub.workers.dev" ;;
 esac
 exit 0
@@ -65,7 +66,7 @@ test("deploy: with token + account id the workers.dev subdomain is ensured BEFOR
     const order = stubApiScript(sb);
     const r = await deploy(sb, ["--subdomain", "acme-wa", "--no-secrets"], { CLOUDFLARE_ACCOUNT_ID: "acc" + rnd() });
     assert.equal(r.code, 0, r.err);
-    assert.deepEqual(order(), ["api subdomain --name wab-test-bot --subdomain acme-wa", "wrangler-deploy"]);
+    assert.deepEqual(order(), ["api subdomain --name wab-test-bot --subdomain acme-wa", "api check-name --name wab-test-bot", "wrangler-deploy"]);
     assert.ok(!(r.out + r.err).includes(sb.env().CLOUDFLARE_API_TOKEN!), "token printed");
   } finally { sb.cleanup(); }
 });

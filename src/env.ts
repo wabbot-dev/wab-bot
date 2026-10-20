@@ -21,6 +21,30 @@ export interface Env {
   VOICE_MAX_CHARS?: string;
   VOICE_MAX_SECONDS?: string;
   VOICE_TIMEOUT_MS?: string;
+  VOICE_REPLY_PROVIDER?: string;
+  ELEVENLABS_API_KEY?: string;
+  ELEVENLABS_VOICE_ID?: string;
+  ELEVENLABS_MODEL_ID?: string;
+  ELEVENLABS_MAX_CHARS?: string;
+  VOICE_STYLE_TAG?: string;
+  MEDIA_READ_DOCUMENTS?: string;
+  SEND_RETRIES?: string;
+  SEND_RETRY_BASE_MS?: string;
+  READ_RECEIPTS?: string;
+  ALERT_WEBHOOK_URL?: string;
+  ALERT_WEBHOOK_KEY?: string;
+  ALERT_WHATSAPP_TO?: string;
+  ALERT_TEMPLATE?: string;
+  ALERT_TEMPLATE_LANGUAGE?: string;
+  ALERT_EVENTS?: string;
+  ALERT_ADMIN_URL?: string;
+  TYPING_INDICATOR?: string;
+  MEDIA_MAX_DOC_BYTES?: string;
+  MEDIA_MAX_DOC_CHARS?: string;
+  VOICE_PRONUNCIATIONS?: string;
+  XAI_TTS_VOICE?: string;
+  XAI_TTS_ARABIC_LOCALE?: string;
+  ARABIC_REPLY_DIALECT?: string;
   // secrets (wrangler secret put)
   WA_ACCESS_TOKEN?: string;
   WA_APP_SECRET?: string;
@@ -40,6 +64,7 @@ export interface Env {
   CALL_ALLOWED_CALLERS?: string;
   CALL_MAX_SECONDS?: string;
   CALL_SIP_WEBHOOKS?: string;
+  CALL_SIP_TARGET?: string;
   CALL_BUDGET_SECONDS?: string;
   CALL_VOICE?: string;
   CALL_LANGUAGE_HINT?: string;
@@ -64,6 +89,14 @@ export interface Env {
   WA_APP_ID?: string;
   // owner-only binding (never self-provisioned): numbers a bot-started message may reach before they ever wrote in
   OUTREACH_ALLOWLIST?: string;
+  OUTBOUND_MEDIA_HOSTS?: string;
+  BUSINESS_MODE?: string;
+  BOT_LANGUAGE?: string;
+  IDENTITY_CHECK?: string;
+  CUSTOMER_DETAILS?: string;
+  BOOKING_WEBHOOK_URL?: string;
+  BOOKING_WEBHOOK_KEY?: string;
+  PAYMENT_CHECK?: string;
   GRAPH_VERSION?: string;
   LAUNCH_MODE?: string;
   TEST_RECIPIENTS?: string;

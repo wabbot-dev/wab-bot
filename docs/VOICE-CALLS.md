@@ -148,6 +148,21 @@ Worker variables; defaults apply to anything left unset (full list in [CONFIGURA
 | `CALL_LANGUAGE_HINT` | `auto` | A language code from the list below; unrecognised codes are silently ignored by xAI. Spanish and Portuguese need a regional code (`es-MX`, `pt-BR`) |
 | `CALL_BUSINESS_NAME`, `CALL_GREETING`, `CALL_INSTRUCTIONS` | generic | Your own wording |
 | `CALL_ALLOWED_CALLERS` | none | Digits, comma separated. Required in test mode; an optional filter in live mode |
+| `CALL_SIP_TARGET` | `xai` | Which voice agent answers. `xai` (default): the built-in xAI agent described on this page. `host[:port]` (for example `sip.your-voice-agent.example:5061`): arming points Meta's SIP calls at that SIP voice agent instead, skips the xAI registration (no xAI key needed), and still switches calling off when the window ends. See *Another voice agent* below |
+
+## Another voice agent (`CALL_SIP_TARGET`)
+
+Any voice-agent provider that accepts SIP over TLS from Meta can answer instead of xAI. Set `CALL_SIP_TARGET` to its public SIP host
+(a name, not an IP address; port 5061 unless you give one). Arming then only sets Meta's SIP server to that host for the window and
+restores the previous settings when it ends. What changes:
+
+- Meta's per-number SIP password stays with Meta: configure your provider with the SIP credentials Meta shows for the number
+  (WhatsApp Manager → phone number → calling settings), following the provider's own guide.
+- The bridge never sees those calls: the caller allowlist (`CALL_ALLOWED_CALLERS`), the per-call and monthly limits, transcripts and
+  the call log are the provider's job, not the bridge's. The arm window (and the dead-man switch-off) still applies.
+- Cost is the provider's price, billed by them.
+
+Tested only as configuration and request shape (`tests/business.test.ts`, `sipTargetOf`); no call has been placed through a custom target.
 
 **Legal.** Recording, transcription and AI-disclosure rules vary by country and region. You own your compliance (see *Recording consent* above).
 

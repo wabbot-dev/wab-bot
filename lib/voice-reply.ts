@@ -6,10 +6,19 @@
  * uploaded to this number's Meta media store and sent as an audio message with voice: true. The reply text is always stored in
  * history. Any failure on the way (unsupported language, cap, model error, encoder, upload) sends the plain text instead and is
  * counted in get_overview's media block. Nothing is retried, nothing is logged but short codes, and no audio is persisted.
+ *
+ * VOICE_REPLY_PROVIDER=xai (lib/tts-xai.ts, the owner's xAI key, same as calls) or =elevenlabs (lib/tts-elevenlabs.ts, the owner's
+ * ElevenLabs key and voice) speaks Arabic, and every language the Workers AI model lacks, instead. ElevenLabs returns Ogg Opus directly
+ * (no encoder, no Durable Object); xAI returns MP3, encoded in the Durable Object like Workers AI audio. Optional, owner-set extras for
+ * the spoken copy only: a dialect preset (ARABIC_REPLY_DIALECT), a pronunciation list (VOICE_PRONUNCIATIONS) and a style tag.
  */
 import { fetchTimeout, type Ctx } from "./ctx";
 import { aiErrorCode, oggOpusSeconds, recordCounts, type AiRunner, type MediaCounts } from "./media";
 import type { Config } from "./config";
+import { speakElevenLabs } from "./tts-elevenlabs";
+import { speakXai, xaiLanguage } from "./tts-xai";
+import { spokenCopy } from "./voice-pronounce";
+import { spokenStyle, supportsAudioTags } from "./voice-style";
 import type { Conv, Msg } from "./types";
 
 export type ReplyAs = "auto" | "text" | "voice";
@@ -77,7 +86,7 @@ export function speakable(text: string): string {
 }
 
 type Prep =
-  | { ok: true; mediaId: string; seconds: number; bytes: number }
+  | { ok: true; mediaId: string; seconds: number; bytes: number; provider: TtsProvider }
   | { ok: false; code: string; count: Partial<MediaCounts> };
 
 async function bytesOf(out: unknown): Promise<Uint8Array | null> {
@@ -101,8 +110,9 @@ export function isMonoOggOpus(b: Uint8Array): boolean {
   return String.fromCharCode(...b.subarray(head, head + 8)) === "OpusHead" && b[head + 9] === 1;
 }
 
-export interface SpeakArgs { text: string; lang: string; model: string; maxSeconds: number; timeoutMs: number }
-export type SpeakResult = { ok: true; ogg: Uint8Array; seconds: number; ttsBytes: number } | { ok: false; code: string; count: Partial<MediaCounts> };
+/** `xai` set = speak with xAI (key read inside the Durable Object, never passed in the call); otherwise the Workers AI model. */
+export interface SpeakArgs { text: string; lang: string; model: string; maxSeconds: number; timeoutMs: number; xai?: { voice: string; language: string; maxChars: number; replace?: Record<string, string> } }
+export type SpeakResult = { ok: true; ogg: Uint8Array; seconds: number; ttsBytes: number; provider?: TtsProvider } | { ok: false; code: string; count: Partial<MediaCounts> };
 /** Text-to-speech + encoding in one step. In production a Durable Object runs it (src/call-do.ts), so the model's large audio
  *  answer is decoded and encoded there (30 s CPU per invocation) and only the small Ogg file comes back to the request. */
 export type VoiceSpeaker = (a: SpeakArgs) => Promise<SpeakResult>;
@@ -141,11 +151,56 @@ export async function speak(ai: AiRunner, encode: VoiceEncoder, a: SpeakArgs): P
   return { ok: true, ogg: r.ogg, seconds: r.seconds, ttsBytes: audio.length };
 }
 
+export type TtsProvider = "workers-ai" | "elevenlabs" | "xai";
+
+/**
+ * Which provider speaks `lang`. Workers AI (the default) keeps every language its model speaks. With VOICE_REPLY_PROVIDER=xai or
+ * =elevenlabs, Arabic, and any language the Workers AI model lacks, go to that provider (both are multilingual). null = no voice.
+ */
+export function ttsProviderFor(cfg: Config, lang: string): TtsProvider | null {
+  const workers = !!ttsLanguages(cfg.voiceTtsModel)[lang];
+  const p = cfg.voiceReplyProvider;
+  if ((p === "elevenlabs" || p === "xai") && /^[a-z]{2}$/.test(lang) && (lang === "ar" || !workers)) return p;
+  return workers ? "workers-ai" : null;
+}
+
+/** Languages the configured providers can speak, for get_overview ("*" = any other language, through xAI or ElevenLabs). */
+export function voiceLanguagesOf(cfg: Config): string[] {
+  const w = Object.keys(ttsLanguages(cfg.voiceTtsModel));
+  return cfg.voiceReplyProvider === "workers-ai" ? w : ["ar", ...w.filter((l) => l !== "ar"), "*"];
+}
+
 /** Speak `text` in `lang` with the configured model: through ctx.speakVoice (the Durable Object), or `inline` in this request (self-test). */
 export async function synthesize(ctx: Ctx, text: string, lang: string, where: "do" | "inline" = "do"): Promise<SpeakResult> {
   const cfg = ctx.cfg;
   const a: SpeakArgs = { text, lang, model: cfg.voiceTtsModel, maxSeconds: cfg.voiceMaxSeconds, timeoutMs: cfg.voiceTimeoutMs };
-  if (!ttsLanguages(a.model)[lang]) return { ok: false, code: `voice_language_unsupported_${lang}`.slice(0, 40), count: { voice_language_unsupported: 1 } };
+  const provider = ttsProviderFor(cfg, lang);
+  if (!provider) return { ok: false, code: `voice_language_unsupported_${lang}`.slice(0, 40), count: { voice_language_unsupported: 1 } };
+  // pronunciation layer: the SPOKEN copy only (owner's list + the dialect preset's marks); the stored reply text is untouched
+  const p = provider === "workers-ai" ? { text, changes: 0 } : spokenCopy(text, { lang, dialect: cfg.arabicReplyDialect, pronunciations: provider === "xai" ? {} : cfg.voicePronunciations });
+  if (p.changes) ctx.log("voice_pronounce", { lang, changes: p.changes });
+  if (provider === "elevenlabs") {
+    // a network call, not CPU work: it runs in this request (no Durable Object needed); the key goes to api.elevenlabs.io only
+    try {
+      return await speakElevenLabs(ctx.fetch, {
+        text: p.text, apiKey: cfg.elevenlabsApiKey ?? "", voiceId: cfg.elevenlabsVoiceId ?? "", modelId: cfg.elevenlabsModelId,
+        maxChars: cfg.elevenlabsMaxChars, maxSeconds: cfg.voiceMaxSeconds, timeoutMs: cfg.voiceTimeoutMs,
+        accentTag: cfg.voiceStyleTag && supportsAudioTags(cfg.elevenlabsModelId) ? cfg.voiceStyleTag : undefined,
+      });
+    } catch {
+      return { ok: false, code: "voice_tts_el_error", count: { voice_tts_failed: 1 } };
+    }
+  }
+  if (provider === "xai") {
+    // MP3 from xAI, then the Ogg Opus encoder: CPU work, so it runs in the Durable Object (the key is read there, never sent in the call)
+    a.text = p.text;
+    a.xai = { voice: cfg.xaiTtsVoice, language: xaiLanguage(lang, cfg.arabicReplyDialect, cfg.xaiTtsArabicLocale), maxChars: cfg.voiceMaxChars, replace: cfg.voicePronunciations };
+    if (where === "inline") {
+      if (!ctx.encodeVoiceInline) return { ok: false, code: "voice_unavailable", count: {} };
+      return speakXai(ctx.fetch, ctx.encodeVoiceInline, { text: a.text, apiKey: cfg.xaiApiKey ?? "", voice: a.xai.voice, language: a.xai.language, maxChars: a.xai.maxChars, maxSeconds: a.maxSeconds, timeoutMs: a.timeoutMs, replace: a.xai.replace });
+    }
+    if (!cfg.xaiApiKey) return { ok: false, code: "voice_tts_xai_key_missing", count: { voice_language_unsupported: 1 } };
+  }
   try {
     if (where === "inline") {
       if (!ctx.ai || !ctx.encodeVoiceInline) return { ok: false, code: "voice_unavailable", count: {} };
@@ -188,10 +243,29 @@ export async function prepareVoice(ctx: Ctx, c: Conv, text: string, askedLang?: 
   if (s.ogg.length > VOICE_MAX_OGG_BYTES) return { ok: false, code: "voice_too_long", count: {} };
   const up = await uploadVoice(ctx, c.phone_number_id, s.ogg);
   if (!up.ok) return { ok: false, code: up.code, count: { voice_upload_failed: 1 } };
-  return { ok: true, mediaId: up.id, seconds: s.seconds, bytes: s.ogg.length };
+  ctx.log("voice_prepared", { conv: c.id, provider: s.provider ?? "workers-ai", ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, upload: "ok" });
+  return { ok: true, mediaId: up.id, seconds: s.seconds, bytes: s.ogg.length, provider: s.provider ?? "workers-ai" };
 }
 
 /** Counters only; never fails the send. */
 export async function recordVoice(ctx: Ctx, count: Partial<MediaCounts>, failure?: string): Promise<void> {
   try { await recordCounts(ctx, count, failure); } catch { /* counters only */ }
+}
+
+/**
+ * What get_history tells the agent about a coming voice reply (absent while VOICE_REPLIES is off): whether the reply will be spoken
+ * (`expected`, mirror of a customer voice note) or may be (`on` mode with reply_as "voice"), and the wording to use when it is Arabic.
+ */
+export function voiceReplyHint(cfg: Config, c: Conv): Record<string, unknown> | null {
+  if (cfg.voiceReplies === "off") return null;
+  const expected = chooseVoice(cfg, c, "auto").voice;
+  const style = spokenStyle(cfg.arabicReplyDialect);
+  return {
+    mode: cfg.voiceReplies,
+    expected,
+    provider: cfg.voiceReplyProvider,
+    max_chars: cfg.voiceReplyProvider === "elevenlabs" ? Math.min(cfg.voiceMaxChars, cfg.elevenlabsMaxChars) : cfg.voiceMaxChars,
+    dialect: cfg.arabicReplyDialect,
+    ...(style && (expected || cfg.voiceReplies === "on") ? { arabic_style: style } : {}),
+  };
 }

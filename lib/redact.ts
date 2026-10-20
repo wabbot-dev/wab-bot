@@ -10,6 +10,7 @@ export function redactShapes(text: string): string {
   let t = String(text);
   t = t.replace(/\bxai-[A-Za-z0-9_-]{16,}/g, "[REDACTED_KEY]"); // xAI API keys
   t = t.replace(/\b(?:sk|rk|pk)-[A-Za-z0-9_-]{16,}/g, "[REDACTED_KEY]"); // generic sk-/rk-/pk- style API keys
+  t = t.replace(/\bsk_[A-Za-z0-9]{24,}/g, "[REDACTED_KEY]"); // sk_ style API keys (ElevenLabs keys look like this)
   t = t.replace(/\bwhsec_[A-Za-z0-9+/=_-]{8,}/g, "[REDACTED]"); // webhook signing secrets
   t = t.replace(/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}|\bgithub_pat_[A-Za-z0-9_]{20,}/g, "[REDACTED_TOKEN]");
   t = t.replace(/\bxox[abprs]-[A-Za-z0-9-]{10,}/g, "[REDACTED_TOKEN]");

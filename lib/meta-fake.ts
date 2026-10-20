@@ -50,6 +50,10 @@ export class FakeMeta {
   templates: { id: string; name: string; status: string; language: string; category: string }[] = [];
   subscribedApps: string[] = [];
   appSub: { object: string; callback_url: string; verify_token: string; fields: string[] } | null = null;
+  /** WABA-level callback override (POST /{waba}/subscribed_apps override_callback_uri) */
+  wabaOverride: string | null = null;
+  /** phone-number-level callback overrides (POST /{phone-number-id} webhook_configuration) */
+  phoneOverride: Record<string, string> = {};
   sends: { to: string; template: string }[] = [];
   otp: string; mintedToken: string;
   private n = 0;
@@ -166,7 +170,16 @@ export class FakeMeta {
       const id = m[1]!;
       const b = this.businesses.find((x) => x.id === id); if (b) return this.json(200, b);
       const w = this.wabas.find((x) => x.id === id); if (w) { const e = need("whatsapp_business_management"); return e ?? this.json(200, w); }
-      const p = this.phones.find((x) => x.id === id); if (p) { const e = need("whatsapp_business_management"); const { pin: _p, ...pub } = p; return e ?? this.json(200, pub); }
+      const p = this.phones.find((x) => x.id === id);
+      if (p && q.fields === "webhook_configuration") {
+        const e = need("whatsapp_business_management"); if (e) return e;
+        const wc: Record<string, string> = {};
+        if (this.phoneOverride[id]) wc.phone_number = this.phoneOverride[id]!;
+        if (this.wabaOverride) wc.whatsapp_business_account = this.wabaOverride;
+        if (this.appSub?.callback_url) wc.application = this.appSub.callback_url;
+        return this.json(200, { webhook_configuration: wc, id });
+      }
+      if (p) { const e = need("whatsapp_business_management"); const { pin: _p, ...pub } = p; return e ?? this.json(200, pub); }
       return this.err(400, 100, `Unsupported get request. Object with ID '${id}' does not exist or you lack permission`);
     }
     if (method === "GET" && (m = /^\/(\d+)\/owned_whatsapp_business_accounts$/.exec(path))) {
@@ -251,6 +264,21 @@ export class FakeMeta {
       ph.status = "CONNECTED"; ph.platform_type = "CLOUD_API"; ph.pin = f.pin;
       return this.json(200, { success: true });
     }
+    if (method === "POST" && (m = /^\/(\d+)$/.exec(path)) && f.webhook_configuration) {
+      const e = need("whatsapp_business_management"); if (e) return e;
+      const ph = this.phones.find((p) => p.id === m![1]);
+      if (!ph) return this.err(400, 100, "Unknown phone number id");
+      if (!this.subscribedApps.includes(this.appId)) return this.err(400, 100, "App is not subscribed to the WhatsApp Business Account");
+      let wc: { override_callback_uri?: string; verify_token?: string };
+      try { wc = JSON.parse(f.webhook_configuration); } catch { return this.err(400, 100, "Invalid webhook_configuration"); }
+      const uri = wc.override_callback_uri ?? "";
+      if (uri.length > 200) return this.err(400, 100, "override_callback_uri too long");
+      if (!uri) { delete this.phoneOverride[ph.id]; return this.json(200, { success: true }); }
+      const ok = this.o.handshake ? await this.o.handshake(uri, wc.verify_token ?? "") : true;
+      if (!ok) return this.err(400, 2200, "Callback verification failed");
+      this.phoneOverride[ph.id] = uri;
+      return this.json(200, { success: true });
+    }
     if (method === "POST" && (m = /^\/(\d+)$/.exec(path)) && (q.new_display_name || f.new_display_name)) {
       const ph = this.phones.find((p) => p.id === m![1]);
       if (!ph) return this.err(400, 100, "Unknown phone number id");
@@ -259,8 +287,17 @@ export class FakeMeta {
     }
     if (m = /^\/(\d+)\/subscribed_apps$/.exec(path)) {
       const e = need("whatsapp_business_management"); if (e) return e;
-      if (method === "GET") return this.json(200, { data: this.subscribedApps.map((id) => ({ whatsapp_business_api_data: { id, name: "Fake App" } })) });
-      if (method === "POST") { if (!isAppToken && info?.appId && info.appId !== this.appId) return this.err(400, 100, "wrong app"); if (!this.subscribedApps.includes(this.appId)) this.subscribedApps.push(this.appId); return this.json(200, { success: true }); }
+      if (method === "GET") return this.json(200, { data: this.subscribedApps.map((id) => ({ whatsapp_business_api_data: { id, name: "Fake App" }, ...(id === this.appId && this.wabaOverride ? { override_callback_uri: this.wabaOverride } : {}) })) });
+      if (method === "POST") {
+        if (!isAppToken && info?.appId && info.appId !== this.appId) return this.err(400, 100, "wrong app");
+        if (!this.subscribedApps.includes(this.appId)) this.subscribedApps.push(this.appId);
+        if (f.override_callback_uri !== undefined) {
+          const ok = f.override_callback_uri && this.o.handshake ? await this.o.handshake(f.override_callback_uri, f.verify_token ?? "") : true;
+          if (!ok) return this.err(400, 2200, "Callback verification failed");
+          this.wabaOverride = f.override_callback_uri || null;
+        }
+        return this.json(200, { success: true });
+      }
     }
     if (m = /^\/(\d+)\/subscriptions$/.exec(path)) {
       if (!isAppToken) return this.err(400, 190, "App access token required");

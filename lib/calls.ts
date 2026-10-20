@@ -88,7 +88,7 @@ export interface CallHost {
 
 export function callingGate(cfg: Config): { ok: boolean; reason?: string } {
   if (cfg.callingMode === "off") return { ok: false, reason: "calling_off" };
-  if (!cfg.xaiApiKey) return { ok: false, reason: "xai_key_missing" };
+  if (!cfg.xaiApiKey && cfg.callSipTarget.kind === "xai") return { ok: false, reason: "xai_key_missing" };
   if (!cfg.waAccessToken || !cfg.callingPhoneNumberId) return { ok: false, reason: "whatsapp_not_configured" };
   if (cfg.callingMode === "test" && cfg.callAllowedCallers.length === 0) return { ok: false, reason: "test_mode_needs_CALL_ALLOWED_CALLERS" };
   if (cfg.callingMode === "live" && (!cfg.callingBvDone || !cfg.callingGoNumber)) return { ok: false, reason: "live_mode_needs_CALLING_BV_DONE_and_CALLING_GO_NUMBER" };
@@ -97,8 +97,8 @@ export function callingGate(cfg: Config): { ok: boolean; reason?: string } {
 
 export function remoteOf(ctx: Ctx): Remote | null {
   const { waAccessToken, xaiApiKey, graphVersion } = ctx.cfg;
-  if (!waAccessToken || !xaiApiKey) return null;
-  return { fetch: ctx.fetch, sleep: ctx.sleep, graphVersion, accessToken: waAccessToken, xaiKey: xaiApiKey };
+  if (!waAccessToken || (!xaiApiKey && ctx.cfg.callSipTarget.kind === "xai")) return null;
+  return { fetch: ctx.fetch, sleep: ctx.sleep, graphVersion, accessToken: waAccessToken, xaiKey: xaiApiKey ?? "" };
 }
 
 /** the row the dead-man alarm and disarm write: no secret, optional retry marker */

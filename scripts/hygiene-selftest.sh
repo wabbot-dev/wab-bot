@@ -22,7 +22,8 @@ a=A; b=KIA   # split so this file itself never contains a complete fake key
   echo "auth Bearer $(printf 'q%.0s' $(seq 1 12))$(printf 'r%.0s' $(seq 1 12))"
   echo "api_key = \"$(printf 'm%.0s' $(seq 1 12))$(printf 'n%.0s' $(seq 1 14))\""
   echo "hosted on Vercel"
-  echo "uses ElevenLabs voices"
+  echo "uses gpt-realtime voices"
+  echo "e = sk_$(printf 'd%.0s' $(seq 1 30))"
   echo "see /workspace/notes"
   echo "CLOUDFLARE_API_TOKEN=$(printf 'c%.0s' $(seq 1 40))"
 } > offenders.txt
@@ -35,7 +36,7 @@ echo "$out" | grep -q "HYGIENE HISTORY: a name" && echo "ok   history match repo
 echo "$out" | grep -q "HYGIENE HISTORY: 1 call id" && echo "ok   call id in history reported" || { echo "FAIL call id in history not reported"; fail=1; }
 HYGIENE_HISTORY=strict bash scripts/hygiene-scan.sh >/dev/null 2>&1 && { echo "FAIL strict history mode passed"; fail=1; } || echo "ok   strict history mode fails"
 [ $rc -ne 0 ] || { echo "SELFTEST FAIL: scan passed on planted offenders"; fail=1; }
-for need in "AWS access key id" "GitHub token" "OpenAI/xAI/Stripe style key" "email address" "local path" "phone-like number" "personal or business name" "bearer token literal" "API key assignment" "stale host reference" "out-of-scope voice provider" "internal tooling name" "Cloudflare API token value" "account or zone id" "formatted phone number" "call id with embedded phone number"; do
+for need in "AWS access key id" "GitHub token" "OpenAI/xAI/Stripe style key" "email address" "local path" "phone-like number" "personal or business name" "bearer token literal" "API key assignment" "stale host reference" "out-of-scope voice provider" "sk_ style API key" "internal tooling name" "Cloudflare API token value" "account or zone id" "formatted phone number" "call id with embedded phone number"; do
   echo "$out" | grep -q "$need" && echo "ok   detector fired: $need" || { echo "FAIL detector did not fire: $need"; fail=1; }
 done
 # a clean repo passes

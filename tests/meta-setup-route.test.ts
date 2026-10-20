@@ -448,7 +448,97 @@ test("webhook: waba_override opt-in is verified by read-back; custom fields; ide
   assert.equal(step(r.json, "webhook").facts.changed, false);
   assert.equal(fm.post(/\/subscriptions$/).length, 1);
   r = await call({ ...body, waba_override: true });
-  assert.equal(step(r.json, "waba_override").status, "FAIL"); // fake does not model override_callback_uri: must not be reported as success
+  assert.equal(step(r.json, "webhook").status, "PASS", "waba_override still works: same as webhook_scope waba");
+  assert.equal(step(r.json, "webhook").facts.mode, "waba");
+  assert.equal(fm.wabaOverride, "https://bridge.example.test/api/webhook");
+});
+
+const OTHER = "https://wab-bot-first.example.test/api/webhook";
+
+test("setup stores the setup number in WA_PHONE_NUMBER_IDS when none is listed (never replaces a list); a mismatch is a WARN", async () => {
+  const s1 = setup({ WA_PHONE_NUMBER_IDS: "" }, { phones: [{}] });
+  const stored: Record<string, string>[] = [];
+  const res = await metaSetupPost(s1.h.ctx, new Request(URL_, { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${ADMIN_TOKEN}` },
+    body: JSON.stringify({ bootstrap_token: BOOT, waba_id: s1.fm.wabaId, phone_number_id: s1.fm.phones[0]!.id, steps: ["webhook"], app_secret: SECRET }) }),
+    { storeSecrets: async (v) => { stored.push(v); return { overridden_by_env: [] }; } });
+  const j: any = await res.json();
+  assert.equal(step(j, "phone_number_ids_stored").status, "PASS");
+  assert.deepEqual(stored, [{ WA_PHONE_NUMBER_IDS: s1.fm.phones[0]!.id }]);
+  const s2 = setup({}, { phones: [{}] });
+  const r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: s2.fm.phones[0]!.id, steps: ["webhook"], app_secret: SECRET });
+  assert.equal(step(r.json, "phone_number_ids_mismatch").status, "WARN");
+  assert.equal(step(r.json, "phone_number_ids_stored"), undefined);
+});
+
+test("webhook guard: an app-level callback that points to ANOTHER deployment is never replaced silently", async () => {
+  // no phone id: refused, nothing changed
+  const a = setup({}, { phones: [{}] });
+  a.fm.appSub = { object: "whatsapp_business_account", callback_url: OTHER, verify_token: "x", fields: ["messages"] };
+  let r = await a.call({ bootstrap_token: BOOT, waba_id: a.fm.wabaId, steps: ["webhook"], app_secret: SECRET });
+  assert.equal(step(r.json, "webhook").status, "FAIL");
+  assert.equal(step(r.json, "webhook").facts.mode, "refused");
+  assert.equal(step(r.json, "webhook").facts.current_host, "wab-bot-first.example.test");
+  assert.equal(a.fm.appSub?.callback_url, OTHER, "untouched");
+  assert.equal(a.fm.post(/\/subscriptions$/).length, 0);
+  // explicit app scope without confirmation: refused too
+  r = await a.call({ bootstrap_token: BOOT, waba_id: a.fm.wabaId, steps: ["webhook"], app_secret: SECRET, webhook_scope: "app" });
+  assert.equal(step(r.json, "webhook").status, "FAIL");
+  assert.equal(a.fm.appSub?.callback_url, OTHER);
+  // explicit confirmation: replaced, reported as WARN with the old host
+  r = await a.call({ bootstrap_token: BOOT, waba_id: a.fm.wabaId, steps: ["webhook"], app_secret: SECRET, webhook_scope: "app", replace_webhook: true });
+  assert.equal(step(r.json, "webhook").status, "WARN");
+  assert.match(step(r.json, "webhook").detail, /was wab-bot-first\.example\.test/);
+  assert.equal(a.fm.appSub?.callback_url, "https://bridge.example.test/api/webhook");
+});
+
+test("webhook guard: second bot on the same Meta app gets a per-number override; the first bot keeps the app level", async () => {
+  const s2 = setup({}, { phones: [{}, {}] });
+  const pn = s2.fm.phones[1]!.id;
+  s2.fm.subscribedApps.push(s2.fm.appId);
+  s2.fm.appSub = { object: "whatsapp_business_account", callback_url: OTHER, verify_token: "x", fields: ["messages"] };
+  let r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET });
+  assert.equal(step(r.json, "webhook_app_level").status, "WARN");
+  assert.equal(step(r.json, "webhook").status, "PASS");
+  assert.equal(step(r.json, "webhook").facts.mode, "phone");
+  assert.equal(s2.fm.phoneOverride[pn], "https://bridge.example.test/api/webhook");
+  assert.equal(s2.fm.phoneOverride[s2.fm.phones[0]!.id], undefined, "the other number is not touched");
+  assert.equal(s2.fm.appSub?.callback_url, OTHER, "app level untouched");
+  assert.equal(step(r.json, "webhook_effective").status, "PASS");
+  const sent = s2.fm.calls.find((c) => c.method === "POST" && c.path === `/${pn}`)!;
+  assert.deepEqual(JSON.parse(sent.form.webhook_configuration!), { override_callback_uri: "https://bridge.example.test/api/webhook", verify_token: VERIFY_TOKEN });
+  // idempotent
+  r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET });
+  assert.equal(step(r.json, "webhook").facts.changed, false);
+  // the number's events routed to a third deployment: refused without confirmation
+  s2.fm.phoneOverride[pn] = "https://third.example.test/api/webhook";
+  r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET });
+  assert.equal(step(r.json, "webhook").status, "FAIL");
+  assert.equal(s2.fm.phoneOverride[pn], "https://third.example.test/api/webhook");
+  r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET, webhook_scope: "phone", replace_webhook: true });
+  assert.equal(step(r.json, "webhook").status, "PASS");
+  assert.equal(s2.fm.phoneOverride[pn], "https://bridge.example.test/api/webhook");
+});
+
+test("webhook guard: the number's own view is read without the app secret; a WABA override elsewhere is refused; first import still sets the app level", async () => {
+  const s3 = setup({ WA_APP_SECRET: undefined }, { phones: [{}] });
+  const pn = s3.fm.phones[0]!.id;
+  s3.fm.subscribedApps.push(s3.fm.appId);
+  s3.fm.appSub = { object: "whatsapp_business_account", callback_url: OTHER, verify_token: "x", fields: ["messages"] };
+  let r = await s3.call({ bootstrap_token: BOOT, waba_id: s3.fm.wabaId, phone_number_id: pn, steps: ["webhook"] });
+  assert.equal(step(r.json, "webhook").facts.mode, "phone", "no app secret, yet the other deployment is seen through the number");
+  assert.equal(s3.fm.phoneOverride[pn], "https://bridge.example.test/api/webhook");
+  const w = setup({}, { phones: [{}] });
+  w.fm.subscribedApps.push(w.fm.appId);
+  w.fm.wabaOverride = OTHER;
+  r = await w.call({ bootstrap_token: BOOT, waba_id: w.fm.wabaId, steps: ["webhook"], app_secret: SECRET, webhook_scope: "waba" });
+  assert.equal(step(r.json, "webhook").status, "FAIL");
+  assert.equal(w.fm.wabaOverride, OTHER);
+  const fresh = setup();
+  r = await fresh.call({ bootstrap_token: BOOT, steps: ["webhook"], app_secret: SECRET });
+  assert.equal(step(r.json, "webhook").status, "PASS");
+  assert.equal(step(r.json, "webhook").facts.mode, "app");
+  assert.equal(r.status, 200);
+  assert.equal((await fresh.call({ bootstrap_token: BOOT, steps: ["webhook"], webhook_scope: "everywhere" })).status, 400);
 });
 
 test("templates: submits once, read-back, WARN when not allowlisted, FAIL surfaces Meta error; validation 400", async () => {

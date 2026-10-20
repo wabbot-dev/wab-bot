@@ -1,4 +1,4 @@
-# Voice notes and images (Workers AI)
+# Voice notes, images, documents and other inbound types (Workers AI)
 
 **Status: released in 0.3.0 (preview).** Evidence is listed at the end of this page; read [STATUS.md](STATUS.md) for the overall picture.
 
@@ -11,7 +11,19 @@ message keeps its WhatsApp type (`audio` or `image`). Nothing changes for text m
 [voice note, transcribed, language: ar] مرحبا، هل أنتم مفتوحون اليوم؟
 [image] description: A white cup of coffee on a saucer with a spoon. There is no text in the image. | caption: Do you have this?
 [voice note, not transcribed]                      <- anything went wrong: the agent asks the customer to type, as before
+[document "Price list.pdf", text extracted] # Price list ...
+[location: 33.8938, 35.5018; name: Main office; address: 1 Example St; map: https://maps.google.com/?q=33.8938,35.5018]
+[shared contact: Sam Example (Acme); phone: +1 555 0100 (WhatsApp 15550100); email: sam@example.test]
+[video, not watched: ask the customer to describe it if it matters] caption: ...
 ```
+
+**Documents** (PDF, Word `.docx`, Excel `.xlsx`/`.xls`, OpenDocument, CSV, plain text, HTML, XML) are downloaded from Meta like images and
+converted to text with Workers AI [Markdown conversion](https://developers.cloudflare.com/workers-ai/features/markdown-conversion/)
+(`env.AI.toMarkdown`), which converts these file types without a model and is free; image files are never sent to it. The first
+`MEDIA_MAX_DOC_CHARS` characters reach the agent. A scanned PDF (only images) gives "no text found". Other types (zip, audio files sent
+as documents, ...) get `[document "name", not read: ...]`. The file name is shown without any path. **Video** is not processed (no free
+video model): the agent sees a marker and the caption. **Shared contacts**, **locations** (coordinates, name, address and a map link)
+and **stickers** are turned into text directly from the webhook, with no download and no model.
 
 ## How it works
 
@@ -50,6 +62,8 @@ The two share one allowance: for example 100 one-minute voice notes and 100 imag
 `media.estimated_neurons_today` (from the published rates and the measured audio seconds and tokens; the authoritative figure is the Workers AI
 dashboard) next to `media.free_neurons_per_day`. Rates are Cloudflare's and can change: check the pricing page.
 
+The allowance belongs to the Cloudflare **account**: several bots (Workers) in one account share it ([DEPLOY.md](DEPLOY.md#one-worker-per-bot-a-second-bot-in-the-same-account)).
+
 The bridge itself never changes a plan or enables billing. If you are on Workers Paid, usage past the allowance **is** billed by Cloudflare; turn
 the features off (below) if you do not want that.
 
@@ -62,6 +76,9 @@ the features off (below) if you do not want that.
 | `MEDIA_MAX_AUDIO_SECONDS` | 120 (5 to 600) | longer voice notes are not transcribed; the duration is read from the Ogg/Opus file itself |
 | `MEDIA_MAX_AUDIO_BYTES` | 2000000 (up to 16 MB) | larger audio files are not downloaded (other audio formats rely on this cap) |
 | `MEDIA_MAX_IMAGE_BYTES` | 3000000 (up to 5 MB) | larger images are not downloaded |
+| `MEDIA_READ_DOCUMENTS` | on | `0`/`off` switches document reading off (`[document "name", not read]` plus the caption) |
+| `MEDIA_MAX_DOC_BYTES` | 2000000 (up to 10 MB) | larger documents are not downloaded |
+| `MEDIA_MAX_DOC_CHARS` | 3000 (200 to 3800) | how much of a document's text the agent gets |
 | `MEDIA_TIMEOUT_MS` | 18000 (2000 to 20000) | Workers AI call timeout; each Graph request has its own 5 seconds |
 | `MEDIA_STT_MODEL`, `MEDIA_VISION_MODEL` | see above | model names |
 | `MEDIA_SELFTEST` | off | `1` mounts the owner-only test route (below); leave it off |
@@ -89,7 +106,7 @@ working: voice notes and images get the fallback marker and `get_overview` shows
 - Transcripts and descriptions are **customer content**: stored like message text, shown to the agent inside `<untrusted_customer_text>`, erased with the conversation, never logged. Treat them exactly like typed text: an image or a voice note can contain instructions, and the agent must not follow them.
 - Machine transcription and description can be wrong. Whisper sometimes adds a short phrase that was not said at the end of a clip (seen live: a stray subtitle credit after a French sample). The agent should confirm order details, amounts, dates and names with the customer.
 - Media goes from Meta to your Worker to Workers AI, all inside your own Cloudflare account. Cloudflare's terms for Workers AI apply.
-- Video, documents and stickers are still stored as type only.
+- Documents are read (see above); a video is noted with its caption but not watched; stickers are noted as `[sticker]`.
 
 ## Owner self-test route
 
@@ -100,6 +117,7 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: audio/ogg
   "https://<worker>/api/admin/media-selftest?kind=audio&voice=1"            # add &via=graph to go through Meta's media store
 ```
 
+`kind` is `audio`, `image` or `document` (add `&filename=price-list.pdf` for a document; the body is the PDF, Office, CSV or text file).
 The body is a sample file. It runs the same caps, model, fallback and counters and stores the result as an inbound message in a self-test
 conversation with a fake reserved number (`15550100099`), **without** waking the agent, and answers status codes only (never the transcript). With `via=graph`
 the sample is first uploaded to the number's own Meta media store (no message is sent; Meta keeps uploads 30 days) and then fetched back by

@@ -20,10 +20,12 @@ type Call = { method: string; url: string; auth: string; body: string };
 interface Opts {
   scopes?: string[]; expires?: number; valid?: boolean; subscribeVisible?: boolean; subPostFails?: boolean; appSubOk?: boolean;
   leakTokenInErrors?: boolean; handshakeOk?: boolean; phones?: any[]; granular?: any[];
+  existingAppCallback?: string; existingPhoneOverride?: string;
 }
 function fakeMeta(o: Opts = {}) {
   const calls: Call[] = [];
-  let subscribed = false, appSub: any = null, override = "";
+  let subscribed = false, appSub: any = o.existingAppCallback ? { object: "whatsapp_business_account", callback_url: o.existingAppCallback, fields: [{ name: "messages" }], active: true } : null, override = "";
+  let pnOverride = o.existingPhoneOverride ?? "";
   const json = (status: number, body: any) => ({ ok: status < 400, status, text: async () => JSON.stringify(body) });
   const f = async (url: string, init: any = {}) => {
     const u = new URL(url);
@@ -64,6 +66,8 @@ function fakeMeta(o: Opts = {}) {
       return json(200, { data: appSub ? [appSub] : [] });
     }
     if (path === `/${PHONE}/register`) return json(200, { success: true });
+    if (path === `/${PHONE}` && u.searchParams.get("fields") === "webhook_configuration") return json(200, { webhook_configuration: { ...(pnOverride ? { phone_number: pnOverride } : {}), ...(appSub ? { application: appSub.callback_url } : {}) } });
+    if (path === `/${PHONE}` && method === "POST") { pnOverride = JSON.parse(body).webhook_configuration.override_callback_uri; return json(200, { success: true }); }
     if (path === `/${PHONE}`) return json(200, { id: PHONE, status: "CONNECTED", code_verification_status: "VERIFIED", platform_type: "CLOUD_API" });
     if (path === `/${WABA}/message_templates`) return json(200, { data: [{ name: "hello_world", language: "en_US", status: "APPROVED" }] });
     if (path === `/${PHONE}/messages`) return json(200, { messaging_product: "whatsapp", contacts: [{ wa_id: "15550000001" }], messages: [{ id: "wamid.FAKE" }] });
@@ -167,6 +171,25 @@ test("--waba-override sets and verifies the WABA-level callback", async () => {
   const r = await run([...BASE, "--waba-override", "--skip-app-subscription"]);
   assert.equal(st(r, "waba_override"), "PASS", r.err);
   assert.equal(r.bundle.webhook.mode, "waba_override");
+});
+
+test("second bot on the same app: the first bot's app-level callback is never moved; only this number is routed here", async () => {
+  const FIRST = "https://wab-bot-first.example.workers.dev/api/webhook";
+  const r = await run(BASE, { existingAppCallback: FIRST }, { META_APP_SECRET: APP_SECRET });
+  assert.equal(st(r, "webhook_app_level"), "WARN");
+  assert.equal(st(r, "phone_override"), "PASS", r.err);
+  assert.equal(r.bundle.webhook.mode, "phone_override");
+  assert.equal(r.calls.filter((c) => c.method === "POST" && /\/subscriptions$/.test(c.url)).length, 0, "no app-level POST");
+  const post = r.calls.find((c) => c.method === "POST" && c.url.endsWith(`/${PHONE}`))!;
+  assert.equal(JSON.parse(post.body).webhook_configuration.override_callback_uri, URL_);
+  // number already routed to a third deployment: refused
+  const t = await run(BASE, { existingAppCallback: FIRST, existingPhoneOverride: "https://third.example.test/api/webhook" }, { META_APP_SECRET: APP_SECRET });
+  assert.equal(st(t, "phone_override"), "FAIL");
+  assert.equal(t.calls.filter((c) => c.method === "POST" && c.url.endsWith(`/${PHONE}`)).length, 0);
+  // explicit --replace-webhook moves the app level, reported as WARN
+  const x = await run([...BASE, "--replace-webhook"], { existingAppCallback: FIRST }, { META_APP_SECRET: APP_SECRET });
+  assert.equal(st(x, "webhook"), "WARN");
+  assert.equal(x.bundle.webhook.mode, "app");
 });
 
 test("handshake FAIL when the bridge rejects the verify token", async () => {

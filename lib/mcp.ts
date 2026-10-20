@@ -7,7 +7,7 @@ import { InvalidParams, serveJsonRpc, type Args, type ToolMeta } from "./mcp-rpc
 import type { ReplyAs } from "./voice-reply";
 import {
   claimConversation, escalateConversation, finishConversation, getControls, getHistory, listPending,
-  releaseConversation, sendReply, startConversation,
+  releaseConversation, reportPaymentTool, sendReply, startConversation, submitRequestTool,
 } from "./tools";
 
 /** Agent MCP route (`/mcp`, Bearer MCP_TOKEN). The JSON-RPC core is shared with the admin route: lib/mcp-rpc.ts. */
@@ -44,6 +44,39 @@ export interface McpHost {
   secretsInfo?: () => Promise<SecretsInfo | null>;
 }
 
+
+const mediaSchema = {
+  type: "object",
+  description: "a document or image: https url (public, Meta downloads it) OR a Meta media id; text becomes the caption",
+  properties: { type: { type: "string", enum: ["image", "document"] }, url: { type: "string", maxLength: 2000 }, id: { type: "string", maxLength: 100 }, filename: { type: "string", maxLength: 120 } },
+  required: ["type"],
+};
+const richSchema = {
+  media: mediaSchema,
+  buttons: {
+    type: "array", minItems: 1, maxItems: 3, description: "up to 3 reply buttons under the text (title max 20 chars); the customer's tap comes back as a message with the title",
+    items: { type: "object", properties: { id: { type: "string", maxLength: 200 }, title: { type: "string", maxLength: 20 } }, required: ["id", "title"] },
+  },
+  list: {
+    type: "object", description: "a menu under the text: button label (max 20) and up to 10 rows in total (title max 24, description max 72)",
+    properties: {
+      button: { type: "string", maxLength: 20 },
+      sections: { type: "array", minItems: 1, maxItems: 10, items: { type: "object", properties: { title: { type: "string", maxLength: 24 }, rows: { type: "array", items: { type: "object", properties: { id: { type: "string" }, title: { type: "string", maxLength: 24 }, description: { type: "string", maxLength: 72 } }, required: ["id", "title"] } } }, required: ["rows"] } },
+    },
+    required: ["button", "sections"],
+  },
+  template_header: {
+    type: "object", description: "for a template whose header has a variable: text, or an image/document by https url or media id",
+    properties: { type: { type: "string", enum: ["text", "image", "document"] }, text: { type: "string", maxLength: 60 }, url: { type: "string", maxLength: 2000 }, id: { type: "string", maxLength: 100 }, filename: { type: "string", maxLength: 120 } },
+    required: ["type"],
+  },
+  template_buttons: {
+    type: "array", maxItems: 10, description: "values for a template's dynamic buttons: index (0-based), sub_type quick_reply (payload) or url (the URL suffix)",
+    items: { type: "object", properties: { index: { type: "integer", minimum: 0, maximum: 9 }, sub_type: { type: "string", enum: ["quick_reply", "url"] }, param: { type: "string", maxLength: 2000 } }, required: ["index", "sub_type", "param"] },
+  },
+} as const;
+const richArgs = (a: Args) => ({ media: a.media, buttons: a.buttons, list: a.list, template_header: a.template_header, template_buttons: a.template_buttons });
+
 const TOOLS: Tool[] = [
   {
     name: "list_pending",
@@ -74,7 +107,9 @@ const TOOLS: Tool[] = [
     description:
       "Send a reply to the customer of this conversation (recipient is fixed by the server; there is no 'to'). Provide text OR template_name. All safety guards are enforced server-side. " +
       "Voice notes (only if the owner turned VOICE_REPLIES on): reply_as \"auto\" (default) speaks the text when the customer's latest message was a voice note, \"voice\" asks for it (mode `on` only), \"text\" never speaks. " +
-      "The text is always stored; if speaking fails or the language has no voice (Arabic, for example) the text is sent instead and the result says sent_as \"text\" with voice_fallback.",
+      "The text is always stored; if speaking fails, the text is too long, or the language has no voice (Arabic without VOICE_REPLY_PROVIDER xai or elevenlabs, for example) the text is sent instead and the result says sent_as \"text\" with voice_fallback. " +
+      "Rich replies (docs/OUTBOUND.md): add ONE of media (a document or image by https url or media id; text is the caption), buttons (up to 3 quick choices) or list (a menu of up to 10 rows) to the text; with a template, template_header and template_buttons fill its header and dynamic buttons. A tapped button or row comes back as a customer message with its title. " +
+      "When get_history returns voice_reply.expected true, your text will be SPOKEN: keep it short (under voice_reply.max_chars), no links, lists or emojis, and if it is Arabic and voice_reply.arabic_style is present, follow it (the owner's chosen dialect preset).",
     inputSchema: obj(
       {
         conversation_id: convSchema,
@@ -85,7 +120,8 @@ const TOOLS: Tool[] = [
         template_params: { type: "array", maxItems: 20, items: { type: "string", maxLength: 1000 } },
         idempotency_key: { type: "string", maxLength: 100 },
         reply_as: { type: "string", enum: ["auto", "text", "voice"], description: "auto (default), text, or voice; see the tool description" },
-        voice_language: { type: "string", pattern: "^[a-z]{2}$", description: "language of the text for the voice, e.g. en, fr, es (optional; detected from the customer's voice note otherwise)" },
+        voice_language: { type: "string", pattern: "^[a-z]{2}$", description: "language of the text for the voice, e.g. en, fr, es, ar (optional; Arabic script is detected by itself; otherwise the customer's voice-note language)" },
+        ...richSchema,
       },
       ["conversation_id", "lease"],
     ),
@@ -106,6 +142,7 @@ const TOOLS: Tool[] = [
         idempotency_key: str(a, "idempotency_key", { max: 100 }),
         reply_as: ra as ReplyAs | undefined,
         voice_language: vl as string | undefined,
+        ...richArgs(a),
       });
     },
   },
@@ -113,7 +150,7 @@ const TOOLS: Tool[] = [
     name: "start_conversation",
     description:
       "Start a message yourself (no lease): a reminder the customer asked for, or a follow-up on an open case. Never marketing. " +
-      "Give conversation_id, or `to` (digits) for a number on the owner's outreach allowlist. Provide text (only inside the 24-hour window) OR an allowlisted template_name. " +
+      "Give conversation_id, or `to` (digits) for a number on the owner's outreach allowlist. Provide text (only inside the 24-hour window) OR an allowlisted template_name; media, buttons, list, template_header and template_buttons work as in send_reply. " +
       "idempotency_key is REQUIRED and must be stable per reminder (a retry with the same key never sends twice). Refused, with no Meta call, for: no prior inbound, opted out, human takeover, held, escalated, an active conversation (use send_reply), auto-reply paused, test-mode recipients, a non-allowlisted template, rate limits.",
     inputSchema: obj(
       {
@@ -124,6 +161,7 @@ const TOOLS: Tool[] = [
         template_language: { type: "string", maxLength: 20 },
         template_params: { type: "array", maxItems: 20, items: { type: "string", maxLength: 1000 } },
         idempotency_key: { type: "string", minLength: 1, maxLength: 100 },
+        ...richSchema,
       },
       ["idempotency_key"],
     ),
@@ -140,6 +178,7 @@ const TOOLS: Tool[] = [
         template_language: str(a, "template_language", { max: 20 }),
         template_params: tp as string[] | undefined,
         idempotency_key: str(a, "idempotency_key", { min: 1, max: 100, required: true }),
+        ...richArgs(a),
       });
     },
   },
@@ -157,9 +196,39 @@ const TOOLS: Tool[] = [
   },
   {
     name: "escalate_conversation",
-    description: "Hand the conversation to a human with a reason (max 500 chars).",
-    inputSchema: obj({ conversation_id: convSchema, lease: leaseSchema, reason: { type: "string", minLength: 1, maxLength: 500 } }, ["conversation_id", "lease", "reason"]),
-    run: (ctx, a) => escalateConversation(ctx, conv(a)!, lease(a), str(a, "reason", { min: 1, max: 500, required: true })!),
+    description: "Hand the conversation to a human with a short reason (max 500 chars; no card numbers or passwords). The owner/staff are alerted at once when alerts are configured (owner_alerted in the result). " +
+      "category: human_requested, complaint, payment, order, booking, account, identity, urgent or other (default).",
+    inputSchema: obj({ conversation_id: convSchema, lease: leaseSchema, reason: { type: "string", minLength: 1, maxLength: 500 },
+      category: { type: "string", enum: ["human_requested", "complaint", "payment", "order", "booking", "account", "identity", "urgent", "other"] } }, ["conversation_id", "lease", "reason"]),
+    run: (ctx, a) => escalateConversation(ctx, conv(a)!, lease(a), str(a, "reason", { min: 1, max: 500, required: true })!, str(a, "category", { min: 1, max: 40 })),
+  },
+  {
+    name: "report_payment",
+    description: "Only when get_history shows business.payment (the owner turned on PAYMENT_CHECK=staff): the customer SAYS they paid. Records the claim (never as paid), alerts staff, who verify it in /admin. " +
+      "Never tell the customer the payment is confirmed until get_history shows business.payment.status verified. No card numbers.",
+    inputSchema: obj({ conversation_id: convSchema, lease: leaseSchema, amount: { type: "string", maxLength: 40 }, reference: { type: "string", maxLength: 80 }, method: { type: "string", maxLength: 40 } }, ["conversation_id", "lease"]),
+    run: (ctx, a) => reportPaymentTool(ctx, conv(a)!, lease(a), { amount: str(a, "amount", { max: 40 }), reference: str(a, "reference", { max: 80 }), method: str(a, "method", { max: 40 }) }),
+  },
+  {
+    name: "submit_request",
+    description: "Only when get_history shows business.requests (the owner connected a booking/order system): pass a booking, order, quote or callback request to that system once the customer has confirmed the details. " +
+      "kind: booking, order, quote, callback or other. summary: one short paragraph. fields: the details (date, time, items, quantity, name, company...). idempotency_key REQUIRED and stable for this request. " +
+      "Confirm to the customer only what the result confirms (reference). On booking_hook_failed, say a person will confirm and escalate.",
+    inputSchema: obj({
+      conversation_id: convSchema, lease: leaseSchema,
+      kind: { type: "string", enum: ["booking", "order", "quote", "callback", "other"] },
+      summary: { type: "string", minLength: 1, maxLength: 1000 },
+      fields: { type: "object", maxProperties: 20, additionalProperties: { type: ["string", "number", "boolean"] } },
+      idempotency_key: { type: "string", minLength: 1, maxLength: 100 },
+    }, ["conversation_id", "lease", "kind", "summary", "idempotency_key"]),
+    run: (ctx, a) => {
+      const f = a.fields;
+      if (f !== undefined && (typeof f !== "object" || f === null || Array.isArray(f) || Object.keys(f).length > 20)) throw new InvalidParams("fields must be an object with at most 20 entries");
+      return submitRequestTool(ctx, conv(a)!, lease(a), {
+        kind: str(a, "kind", { min: 1, max: 20, required: true })!, summary: str(a, "summary", { min: 1, max: 1000, required: true })!,
+        fields: f as Record<string, unknown> | undefined, idempotency_key: str(a, "idempotency_key", { min: 1, max: 100, required: true })!,
+      });
+    },
   },
   {
     name: "get_controls",

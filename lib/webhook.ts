@@ -1,10 +1,10 @@
 import { tokenOk, verifySignature } from "./crypto";
 import type { Ctx } from "./ctx";
 import { armWake, capMessages, convId, convKeyOf, MAX_SEEN_IDS, newConv, normalize, seenKey } from "./conv";
-import { normDigits } from "./config";
+import { normDigits, servesNumber } from "./config";
 import { isStoreBusy, REJECTIONS_KEY, update } from "./store";
 import type { Conv, Msg, OutRec } from "./types";
-import { fallbackText, pendingText, runMediaJob, wantsMedia, type MediaJob, type RawMedia } from "./media";
+import { fallbackText, pendingText, runMediaJob, safeFilename, wantsMedia, type MediaJob, type RawMedia } from "./media";
 import { armedOf, maybeRetryInBackground, runWake, type Armed } from "./wake";
 
 export { REJECTIONS_KEY };
@@ -57,10 +57,41 @@ interface RawMsg {
   button?: { text?: string };
   image?: RawMedia;
   audio?: RawMedia;
-  video?: { caption?: string };
-  document?: { caption?: string };
+  video?: { caption?: string; mime_type?: string };
+  document?: RawMedia;
+  sticker?: { animated?: boolean };
   reaction?: { emoji?: string };
-  location?: { name?: string };
+  location?: { name?: string; address?: string; latitude?: number | string; longitude?: number | string; url?: string };
+  contacts?: SharedContact[];
+}
+interface SharedContact {
+  name?: { formatted_name?: string; first_name?: string; last_name?: string };
+  phones?: { phone?: string; wa_id?: string; type?: string }[];
+  emails?: { email?: string }[];
+  org?: { company?: string; title?: string };
+}
+const clean = (v: unknown, n = 120) => (typeof v === "string" || typeof v === "number" ? String(v).replace(/[\u0000-\u001f\u007f[\]]/g, " ").replace(/\s+/g, " ").trim().slice(0, n) : "");
+const coord = (v: unknown, lim: number) => { const x = Number(v); return Number.isFinite(x) && Math.abs(x) <= lim ? x.toFixed(6).replace(/0+$/, "").replace(/\.$/, "") : ""; };
+
+/** "[location: 33.89, 35.5; name: ...; address: ...; map: https://maps.google.com/?q=lat,long]" (all from the customer, untrusted) */
+export function locationText(l: RawMsg["location"]): string {
+  if (!l) return "[location]";
+  const lat = coord(l.latitude, 90), lon = coord(l.longitude, 180);
+  const parts = [lat && lon ? `${lat}, ${lon}` : "", l.name ? `name: ${clean(l.name)}` : "", l.address ? `address: ${clean(l.address, 200)}` : "",
+    lat && lon ? `map: https://maps.google.com/?q=${lat},${lon}` : ""].filter(Boolean);
+  return parts.length ? `[location: ${parts.join("; ")}]` : "[location]";
+}
+
+/** "[shared contact: Name (Company); phone: +..., wa: ...; email: ...]" for each card (max 5) */
+export function contactsText(cs: SharedContact[] | undefined): string {
+  if (!Array.isArray(cs) || !cs.length) return "[shared contact without details]";
+  return cs.slice(0, 5).map((c) => {
+    const name = clean(c?.name?.formatted_name || [c?.name?.first_name, c?.name?.last_name].filter(Boolean).join(" ")) || "no name";
+    const org = clean(c?.org?.company, 80);
+    const phones = (c?.phones ?? []).slice(0, 3).map((p) => clean(p?.phone, 30) + (p?.wa_id ? ` (WhatsApp ${clean(p.wa_id, 20)})` : "")).filter(Boolean);
+    const emails = (c?.emails ?? []).slice(0, 2).map((e) => clean(e?.email, 80)).filter(Boolean);
+    return `[shared contact: ${name}${org ? ` (${org})` : ""}${phones.length ? `; phone: ${phones.join(", ")}` : ""}${emails.length ? `; email: ${emails.join(", ")}` : ""}]`;
+  }).join(" ");
 }
 
 /** Text we store for a message (never downloads media). */
@@ -72,10 +103,12 @@ export function extractText(m: RawMsg): string {
     case "interactive": s = m.interactive?.button_reply?.title ?? m.interactive?.list_reply?.title; break;
     case "button": s = m.button?.text; break;
     case "image": s = m.image?.caption; break;
-    case "video": s = m.video?.caption; break;
-    case "document": s = m.document?.caption; break;
+    case "video": s = `[video, not watched: ask the customer to describe it if it matters]${m.video?.caption ? ` caption: ${m.video.caption}` : ""}`; break;
+    case "document": { const f = safeFilename(m.document?.filename); s = `[document${f ? ` "${f}"` : ""}, not read]${m.document?.caption ? ` caption: ${m.document.caption}` : ""}`; break; }
+    case "sticker": return "[sticker]";
     case "reaction": return `[reaction ${m.reaction?.emoji ?? ""}]`.replace(" ]", "]");
-    case "location": s = m.location?.name ? `[location: ${m.location.name}]` : "[location]"; break;
+    case "location": s = locationText(m.location); break;
+    case "contacts": s = contactsText(m.contacts); break;
   }
   if (s === undefined || s === "") s = `[${t} without text]`;
   return s.slice(0, MAX_TEXT);
@@ -109,9 +142,10 @@ export const MEDIA_WAKE_WAIT_MS = 25000;
 function mediaIncoming(ctx: Ctx, m: RawMsg, base: Incoming): Incoming {
   const kind = wantsMedia(ctx, base.type);
   if (!kind) return base;
-  const raw = kind === "audio" ? m.audio : m.image;
-  const caption = kind === "image" && raw?.caption ? String(raw.caption).slice(0, 1000) : undefined;
-  const job = { kind, voice: kind === "audio" && raw?.voice === true, caption, mediaId: typeof raw?.id === "string" ? raw.id : undefined, mime: typeof raw?.mime_type === "string" ? raw.mime_type : undefined };
+  const raw = kind === "audio" ? m.audio : kind === "document" ? m.document : m.image;
+  const caption = kind !== "audio" && raw?.caption ? String(raw.caption).slice(0, 1000) : undefined;
+  const job = { kind, voice: kind === "audio" && raw?.voice === true, caption, mediaId: typeof raw?.id === "string" ? raw.id : undefined, mime: typeof raw?.mime_type === "string" ? raw.mime_type : undefined,
+    ...(kind === "document" && raw?.filename ? { filename: safeFilename(raw.filename) } : {}) };
   if (!ctx.ai || !ctx.cfg.waAccessToken || !job.mediaId) {
     return { ...base, text: fallbackText(job) };
   }
@@ -251,7 +285,7 @@ const short = (x: unknown, n = 40) => (typeof x === "string" || typeof x === "nu
 function logCallEvents(ctx: Ctx, v: any): void {
   if (!ctx.cfg.callSipWebhooks || !Array.isArray(v?.calls)) return;
   const pn = String(v?.metadata?.phone_number_id ?? "");
-  if (pn && ctx.cfg.phoneNumberIds.length && !ctx.cfg.phoneNumberIds.includes(pn)) return;
+  if (pn && !servesNumber(ctx.cfg, pn)) return;
   for (const c of v.calls.slice(0, 10)) {
     ctx.log("meta_call_event", {
       event: short(c?.event), call_id: short(c?.id, 80), status: short(c?.status), direction: short(c?.direction), duration: short(c?.duration),
@@ -284,7 +318,7 @@ export async function handleWebhookPost(ctx: Ctx, req: Request): Promise<Respons
           const v = ch.value ?? {};
           const pn = String(v.metadata?.phone_number_id ?? "");
           if (!pn) continue;
-          if (ctx.cfg.phoneNumberIds.length && !ctx.cfg.phoneNumberIds.includes(pn)) continue;
+          if (!servesNumber(ctx.cfg, pn)) { ctx.log("webhook_number_not_served", { configured: ctx.cfg.phoneNumberIds.length }); continue; }
           const own = normDigits(String(v.metadata?.display_phone_number ?? ""));
           const names = new Map<string, string>();
           for (const c of v.contacts ?? []) if (c?.wa_id && c?.profile?.name) names.set(String(c.wa_id), String(c.profile.name));
