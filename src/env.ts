@@ -88,6 +88,7 @@ export interface Env {
   WA_APP_ID?: string;
   // owner-only binding (never self-provisioned): numbers a bot-started message may reach before they ever wrote in
   OUTREACH_ALLOWLIST?: string;
+  OUTBOUND_MEDIA_HOSTS?: string;
   GRAPH_VERSION?: string;
   LAUNCH_MODE?: string;
   TEST_RECIPIENTS?: string;

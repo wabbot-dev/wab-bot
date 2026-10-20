@@ -70,6 +70,7 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 | `VOICE_TTS_MODEL` | Workers AI text-to-speech model (default `@cf/myshell-ai/melotts`: English, French, Spanish, Chinese, Japanese, Korean; no Arabic, see `VOICE_REPLY_PROVIDER`) |
 | `VOICE_MAX_CHARS`, `VOICE_MAX_SECONDS`, `VOICE_TIMEOUT_MS` | Caps (default 400 characters, 45 s of audio) and the text-to-speech timeout (default 15000 ms); over a cap the text is sent |
 | `VOICE_REPLY_PROVIDER` | `workers-ai` (default), `xai` (your xAI key, as for calls) or `elevenlabs` (your ElevenLabs voice): Arabic, and languages the Workers AI model lacks, are spoken by that provider ([VOICE-REPLIES.md](VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)) |
+| `OUTBOUND_MEDIA_HOSTS` | If set, documents and images sent by URL must come from these hosts ([OUTBOUND.md](OUTBOUND.md)) |
 | `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_KEY` (secret) | Instant alert webhook (https) and its Bearer key ([ALERTS.md](ALERTS.md)) |
 | `ALERT_WHATSAPP_TO`, `ALERT_TEMPLATE`, `ALERT_TEMPLATE_LANGUAGE` | Owner/staff numbers for WhatsApp alerts; approved template (one body parameter), language (default `en`) |
 | `ALERT_EVENTS`, `ALERT_ADMIN_URL` | Which events alert (default all: `escalation`, `payment_claimed`, `booking_failed`, `test`); admin link in the webhook body |

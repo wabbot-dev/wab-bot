@@ -33,6 +33,8 @@ export interface Config {
   appId?: string;
   /** OUTREACH_ALLOWLIST (owner-only binding, digits, empty by default): numbers a bot-started message may reach before they ever wrote in */
   outreachAllowlist: string[];
+  /** OUTBOUND_MEDIA_HOSTS: if set, documents/images sent by URL must come from these hosts (or their subdomains) */
+  outboundMediaHosts: string[];
   graphVersion: string;
   launchMode: "live" | "test";
   testRecipients: string[];
@@ -211,6 +213,7 @@ export function loadConfig(env: Env): Config {
     wabaId: /^\d{5,25}$/.test(env.WA_WABA_ID?.trim() ?? "") ? env.WA_WABA_ID!.trim() : undefined,
     appId: /^\d{5,25}$/.test(env.WA_APP_ID?.trim() ?? "") ? env.WA_APP_ID!.trim() : undefined,
     outreachAllowlist: list(env.OUTREACH_ALLOWLIST).map(digits).filter(Boolean),
+    outboundMediaHosts: list(env.OUTBOUND_MEDIA_HOSTS).map((h) => h.toLowerCase().replace(/^\*\./, "")).filter(Boolean),
     graphVersion: env.GRAPH_VERSION?.trim() || "v25.0",
     // Fail-safe: anything other than exactly "live" is test mode.
     launchMode: env.LAUNCH_MODE?.trim().toLowerCase() === "live" ? "live" : "test",

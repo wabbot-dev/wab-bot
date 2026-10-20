@@ -1,3 +1,4 @@
+import { richOf, richPayload, richStoredText, templateComponents, type Rich, type RichArgs } from "./outbound";
 import { randomHex, safeEqual, sha256hex } from "./crypto";
 import type { Ctx } from "./ctx";
 import { fetchTimeout } from "./ctx";
@@ -150,6 +151,12 @@ export interface SendArgs {
   reply_as?: ReplyAs;
   /** language of the text for the voice (ISO 639-1, e.g. "en", "fr"); the script of the text wins when it is not Latin */
   voice_language?: string;
+  /** rich parts (docs/OUTBOUND.md): media OR buttons OR list with text; template_header / template_buttons with a template */
+  media?: unknown;
+  buttons?: unknown;
+  list?: unknown;
+  template_header?: unknown;
+  template_buttons?: unknown;
 }
 
 function unseenError(c: Conv): Json {
@@ -175,17 +182,24 @@ function blockedState(c: Conv): string | null {
 }
 
 /** What to send: text OR an allowlisted template. Checked before any Meta call; `windowOk` = the 24-hour window is open. */
-interface Content { isTemplate: boolean; text: string; template_name?: string; template_language?: string; template_params?: string[]; voiceMediaId?: string }
-function contentOf(cfg: Ctx["cfg"], a: { text?: string; template_name?: string; template_language?: string; template_params?: string[] }): Content | Json {
+interface Content { isTemplate: boolean; text: string; template_name?: string; template_language?: string; template_params?: string[]; voiceMediaId?: string; rich?: Rich }
+type ContentArgs = { text?: string; template_name?: string; template_language?: string; template_params?: string[] } & RichArgs;
+function contentOf(cfg: Ctx["cfg"], a: ContentArgs): Content | Json {
   if (a.template_name) {
     if (!cfg.templateAllowlist.includes(a.template_name)) return { ok: false, error: "template_not_allowlisted" };
-    return { isTemplate: true, text: "", template_name: a.template_name, template_language: a.template_language, template_params: a.template_params };
+    const rich = richOf(a, { isTemplate: true, text: "", hosts: cfg.outboundMediaHosts });
+    if (rich && "ok" in rich) return rich as Json;
+    return { isTemplate: true, text: "", template_name: a.template_name, template_language: a.template_language, template_params: a.template_params, ...(rich ? { rich: rich as Rich } : {}) };
   }
   const text = a.text ?? "";
-  if (text.trim() === "") return { ok: false, error: "empty_text" };
+  const rich = richOf(a, { isTemplate: false, text, hosts: cfg.outboundMediaHosts });
+  if (rich && "ok" in rich) return rich as Json;
+  if (text.trim() === "" && !(rich as Rich | undefined)?.media) return { ok: false, error: "empty_text" };
   if (text.length > 4000) return { ok: false, error: "text_too_long" };
-  return { isTemplate: false, text };
+  return { isTemplate: false, text, ...(rich ? { rich: rich as Rich } : {}) };
 }
+/** What the default idempotency key hashes: the text plus any rich part, so a different attachment or button set is a new send. */
+const contentFingerprint = (c: Content) => (c.isTemplate ? `${c.template_name}|${JSON.stringify(c.rich ?? null)}` : c.rich ? `${c.text}|${JSON.stringify(c.rich)}` : c.text);
 const isContent = (x: Content | Json): x is Content => typeof (x as Content).isTemplate === "boolean";
 
 /** Idempotency: a replayed key returns the earlier result; a failed key needs a new key; a stale 'sending' record becomes uncertain and is held. */
@@ -210,14 +224,17 @@ function reserveSlots(ctx: Ctx, c: Conv, h: HourCounter | null, replyKey: string
   const hc = h?.c ?? 0;
   if (hc >= cfg.rateGlobalPerHour) return { ok: false, error: "rate_limited_global" };
   c.sends.push(now);
+  const stored = content.isTemplate ? null : richStoredText(content.rich, content.text);
   c.outs[replyKey] = {
-    key: replyKey, status: "sending", kind: content.isTemplate ? "template" : content.voiceMediaId ? "voice" : "text", origin,
-    template: content.isTemplate ? content.template_name : undefined, createdAt: now, updatedAt: now,
+    key: replyKey, status: "sending", origin, createdAt: now, updatedAt: now,
+    kind: content.isTemplate ? "template" : content.voiceMediaId ? "voice" : content.rich?.media ? "media" : content.rich ? "interactive" : "text",
+    template: content.isTemplate ? content.template_name : undefined,
   };
   pruneOuts(c);
   c.messages.push({
-    id: `pending:${replyKey}`, dir: "out", type: content.isTemplate ? "template" : content.voiceMediaId ? "audio" : "text",
-    text: content.isTemplate ? `[template ${content.template_name}]` : content.text, ts: now, status: "sending", rk: replyKey,
+    id: `pending:${replyKey}`, dir: "out", type: content.isTemplate ? "template" : content.voiceMediaId ? "audio" : stored?.type ?? "text",
+    text: content.isTemplate ? `[template ${content.template_name}${content.rich?.header && content.rich.header.type !== "text" ? ` with ${content.rich.header.type}` : ""}]` : stored?.text ?? content.text,
+    ts: now, status: "sending", rk: replyKey,
   });
   capMessages(c, cfg.maxMessages);
   c.updatedAt = now;
@@ -243,17 +260,18 @@ export async function deliver(ctx: Ctx, d: { id: string; replyKey: string; to: s
   };
   if (content.isTemplate) {
     payload.type = "template";
+    const components = templateComponents(content.template_params, content.rich);
     payload.template = {
       name: content.template_name,
       language: { code: content.template_language || "en" },
-      ...(content.template_params?.length
-        ? { components: [{ type: "body", parameters: content.template_params.map((t) => ({ type: "text", text: t })) }] }
-        : {}),
+      ...(components.length ? { components } : {}),
     };
   } else if (content.voiceMediaId) {
     // voice-note reply: the text itself is stored in history (reserveSlots) but only the audio goes to the customer
     payload.type = "audio";
     payload.audio = { id: content.voiceMediaId, voice: true };
+  } else if (content.rich) {
+    Object.assign(payload, richPayload(content.rich, content.text));
   } else {
     payload.type = "text";
     payload.text = { preview_url: false, body: content.text };
@@ -384,7 +402,7 @@ export async function sendReply(ctx: Ctx, a: SendArgs): Promise<Json> {
   // 9 idempotency
   const replyKey = a.idempotency_key
     ? sha256hex(`${id}|${a.idempotency_key}`).slice(0, 32)
-    : sha256hex(`${id}|${a.lease}|${content.isTemplate ? content.template_name : content.text}`).slice(0, 32);
+    : sha256hex(`${id}|${a.lease}|${contentFingerprint(content)}`).slice(0, 32);
   const replay = await replayOf(ctx, c0, replyKey, now0);
   if (replay) return replay;
   // 10 per-conversation rate
@@ -396,7 +414,7 @@ export async function sendReply(ctx: Ctx, a: SendArgs): Promise<Json> {
   // model never leaves a 'sending' record behind; any failure here simply sends the text (nothing is retried).
   let voiceFallback: string | undefined;
   let voiceInfo: { seconds: number; provider: TtsProvider } | undefined;
-  if (!content.isTemplate) {
+  if (!content.isTemplate && !content.rich) {
     const choice = chooseVoice(cfg, c0, a.reply_as);
     if (choice.voice) {
       const p = await prepareVoice(ctx, c0, content.text, a.voice_language);
@@ -437,6 +455,7 @@ export async function sendReply(ctx: Ctx, a: SendArgs): Promise<Json> {
   if (!reserve.result.ok) return reserve.result;
   const res = await deliver(ctx, { id, replyKey, to: String(reserve.result.wa_id), pn: String(reserve.result.phone_number_id), content, origin: "reply" });
   if (content.isTemplate) return res;
+  if (content.rich) return { ...res, sent_as: content.rich.media ? content.rich.media.type : "interactive" };
   if (content.voiceMediaId) {
     if (res.ok === true) {
       const secs = Math.round(voiceInfo?.seconds ?? 0);
@@ -463,6 +482,11 @@ export interface StartArgs {
   template_language?: string;
   template_params?: string[];
   idempotency_key?: string;
+  media?: unknown;
+  buttons?: unknown;
+  list?: unknown;
+  template_header?: unknown;
+  template_buttons?: unknown;
 }
 
 /** Why a bot-started message may not go to this conversation now (state, opt-out). Re-checked inside the reserve commit. */
@@ -563,7 +587,7 @@ export async function startConversation(ctx: Ctx, a: StartArgs): Promise<Json> {
  * (outside it only an allowlisted template), the same rate slots and idempotency as every other send. Opt-out does not block
  * a reply to a customer who is talking to staff.
  */
-export async function staffReply(ctx: Ctx, a: { conversation_id: string; text?: string; template_name?: string; template_language?: string; idempotency_key?: string }): Promise<Json> {
+export async function staffReply(ctx: Ctx, a: { conversation_id: string; text?: string; template_name?: string; template_language?: string; idempotency_key?: string; media?: unknown }): Promise<Json> {
   const { cfg } = ctx;
   if (!CONV_ID_RE.test(a.conversation_id)) return { ok: false, error: "not_found" };
   const content = contentOf(cfg, a);
