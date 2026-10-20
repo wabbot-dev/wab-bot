@@ -95,3 +95,17 @@ test("location, contacts and video end to end: stored as text, wake as usual", a
   const msgs = (await getConv(h)).messages.map((m) => m.text);
   assert.deepEqual(msgs, ["[location: 10.5, -20.25; name: Gate 3; map: https://maps.google.com/?q=10.5,-20.25]", "[shared contact: Pat; phone: +1 555 0101]", "[video, not watched: ask the customer to describe it if it matters]"]);
 });
+
+test("owner media self-test reads a document too (kind=document, filename), with no Meta call and no wake", async () => {
+  const { adminMediaSelftest } = await import("../lib/admin");
+  const { ADMIN_TOKEN } = await import("./helpers");
+  const h = makeHarness({ MEDIA_SELFTEST: "1" });
+  await activate(h);
+  fakeMarkdown(h, [{ name: "document.pdf", format: "markdown", data: "Opening hours: 9 to 5" }]);
+  const req = new Request("https://x.test/api/admin/media-selftest?kind=document&filename=hours.pdf", { method: "POST", headers: { Authorization: `Bearer ${ADMIN_TOKEN}`, "Content-Type": "application/pdf" }, body: new Uint8Array(300).fill(37) });
+  const j: any = await (await adminMediaSelftest(h.ctx, req)).json();
+  assert.equal(j.ok, true);
+  assert.equal(j.media_status, "done");
+  assert.equal(h.net.graph.length, 0);
+  assert.equal(h.net.wakes.length, 0);
+});

@@ -10,7 +10,7 @@ import { armedOf, kickPendingWakes, runWake, type Armed } from "./wake";
 import { createInvite, redeemInvite, SESSION_MS, sessionCookie, sessionOf, sessionValue } from "./staff";
 import { staffReply, startConversation } from "./tools";
 import { randomHex } from "./crypto";
-import { runMediaJob, wantsMedia } from "./media";
+import { runMediaJob, safeFilename, wantsMedia } from "./media";
 import { applyInbound } from "./webhook";
 import { claimConversation, getHistory, sendReply } from "./tools";
 import { isMonoOggOpus, synthesize, uploadVoice } from "./voice-reply";
@@ -289,7 +289,7 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
 export const SELFTEST_WA = "15550100099";
 
 /**
- * POST /api/admin/media-selftest?kind=audio|image[&voice=1][&caption=...][&via=graph] (Bearer ADMIN_TOKEN only; 404 unless MEDIA_SELFTEST=1).
+ * POST /api/admin/media-selftest?kind=audio|image|document[&voice=1][&caption=...][&filename=...][&via=graph] (Bearer ADMIN_TOKEN only; 404 unless MEDIA_SELFTEST=1).
  * via=graph first uploads the sample to the number's own Meta media store and then downloads it by media id (the real webhook path).
  * The body is the media file itself (sample audio or image). It runs the SAME understanding path as a WhatsApp message (caps,
  * Workers AI, fallback, counters) and stores the result as an inbound message in a self-test conversation with a fake number,
@@ -300,17 +300,19 @@ export async function adminMediaSelftest(ctx: Ctx, req: Request): Promise<Respon
   if (!ctx.cfg.mediaSelftest) return Response.json({ error: "not_found" }, { status: 404 });
   if (!ownerAuthorized(ctx, req)) return unauthorized();
   const url = new URL(req.url);
-  const type = url.searchParams.get("kind") === "image" ? "image" : url.searchParams.get("kind") === "audio" ? "audio" : null;
+  const k = url.searchParams.get("kind");
+  const type = k === "image" || k === "audio" || k === "document" ? k : null;
   if (!type) return bad();
   const kind = wantsMedia(ctx, type);
   if (!kind) return Response.json({ ok: false, error: "feature_off" });
   const bytes = new Uint8Array(await req.arrayBuffer());
   if (!bytes.byteLength || bytes.byteLength > 16_000_000) return bad();
-  const caption = kind === "image" ? url.searchParams.get("caption")?.slice(0, 1000) || undefined : undefined;
+  const caption = kind !== "audio" ? url.searchParams.get("caption")?.slice(0, 1000) || undefined : undefined;
+  const filename = kind === "document" ? safeFilename(url.searchParams.get("filename") ?? "sample.pdf") : undefined;
   const voice = kind === "audio" && url.searchParams.get("voice") === "1";
   const mime = (req.headers.get("content-type") ?? "").split(";")[0]!.trim() || undefined;
   const id = `selftest.${randomHex(8)}`;
-  let job: { kind: typeof kind; voice: boolean; caption?: string; mime?: string; bytes?: Uint8Array; mediaId?: string } = { kind, voice, caption, mime, bytes };
+  let job: { kind: typeof kind; voice: boolean; caption?: string; mime?: string; bytes?: Uint8Array; mediaId?: string; filename?: string } = { kind, voice, caption, mime, bytes, ...(filename ? { filename } : {}) };
   if (url.searchParams.get("via") === "graph") {
     // Exercise the REAL webhook download path: upload the sample to this number's own Meta media store (no message is sent; Meta
     // keeps uploads for 30 days), then let the job fetch it back by media id with the stored token, exactly as for a customer's file.
@@ -319,7 +321,7 @@ export async function adminMediaSelftest(ctx: Ctx, req: Request): Promise<Respon
     const form = new FormData();
     form.set("messaging_product", "whatsapp");
     form.set("type", mime ?? "application/octet-stream");
-    form.set("file", new Blob([bytes as unknown as ArrayBuffer], { type: mime ?? "application/octet-stream" }), kind === "image" ? "sample.jpg" : "sample.ogg");
+    form.set("file", new Blob([bytes as unknown as ArrayBuffer], { type: mime ?? "application/octet-stream" }), kind === "image" ? "sample.jpg" : kind === "document" ? (filename ?? "sample.pdf") : "sample.ogg");
     let up: Response;
     try {
       up = await ctx.fetch(`https://graph.facebook.com/${ctx.cfg.graphVersion}/${encodeURIComponent(pnid)}/media`, { method: "POST", headers: { Authorization: `Bearer ${ctx.cfg.waAccessToken}` }, body: form });
@@ -328,7 +330,7 @@ export async function adminMediaSelftest(ctx: Ctx, req: Request): Promise<Respon
     }
     const uj = (await up.json().catch(() => ({}))) as { id?: unknown };
     if (!up.ok || typeof uj.id !== "string") return Response.json({ ok: false, error: `upload_http_${up.status}` });
-    job = { kind, voice, caption, mime, mediaId: uj.id };
+    job = { kind, voice, caption, mime, mediaId: uj.id, ...(filename ? { filename } : {}) };
   }
   const pn = ctx.cfg.phoneNumberIds[0] ?? "selftest";
   const r = await applyInbound(ctx, { pn, waba: ctx.cfg.wabaId ?? "selftest", wa: SELFTEST_WA }, [

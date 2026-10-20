@@ -117,6 +117,7 @@ curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" -H "Content-Type: audio/ogg
   "https://<worker>/api/admin/media-selftest?kind=audio&voice=1"            # add &via=graph to go through Meta's media store
 ```
 
+`kind` is `audio`, `image` or `document` (add `&filename=price-list.pdf` for a document; the body is the PDF, Office, CSV or text file).
 The body is a sample file. It runs the same caps, model, fallback and counters and stores the result as an inbound message in a self-test
 conversation with a fake reserved number (`15550100099`), **without** waking the agent, and answers status codes only (never the transcript). With `via=graph`
 the sample is first uploaded to the number's own Meta media store (no message is sent; Meta keeps uploads 30 days) and then fetched back by
