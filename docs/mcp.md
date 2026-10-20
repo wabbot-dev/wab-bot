@@ -24,7 +24,7 @@ curl -s "$ADMIN" -H "Authorization: Bearer $ADMIN_MCP_TOKEN" -H 'content-type: a
 
 There is deliberately **no tool** that creates a Cloudflare or xAI account, or that accepts, stores, reads or rotates a key. Account creation, secret entry, Meta Business Verification and the SMS or voice code from your own SIM stay with you, using masked forms (hidden prompts, `wrangler secret put`, the provider's own sign-up pages). An assistant may drive the Meta developer-account screens with you watching, but **you personally enter the code** and the assistant never sees it. The voice-calling gate (`CALLING_MODE`, `CALLING_BV_DONE`, `CALLING_GO_NUMBER`) is Worker settings only: no tool can open it.
 
-## Tools (14)
+## Tools (17)
 
 | Tool | Reads or changes | What it returns |
 |---|---|---|
@@ -33,6 +33,9 @@ There is deliberately **no tool** that creates a Cloudflare or xAI account, or t
 | `list_conversations` | read | Redacted list: id, state, last two digits of the customer number, counts and statuses. No names, no text, no leases |
 | `get_conversation` | read | One conversation's metadata: state, reply records (status, kind, template name, Meta error code), wake log, last 50 messages as direction, type, time, status and length. Never the text |
 | `erase_conversation` | **destructive** | Erases one conversation through the same code as `DELETE /api/admin/conversations/<id>`. Needs `confirm` equal to the conversation id |
+| `directory_list` | read | The owner's contact/account directory for business mode: last 4 digits, account, person, tags, known account, whether terms and notes are set ([BUSINESS-MODE.md](BUSINESS-MODE.md)) |
+| `directory_upsert` | changes the directory | Adds or updates one entry by WhatsApp number; the agent sees it as trusted owner data |
+| `directory_delete` | **destructive** | Removes one entry (the number becomes an unknown contact again) |
 | `calling_status` | read | Gate state, arm window, last disarm; with `verify_remote` it also asks Meta whether calling and SIP are on |
 | `arm_calling` | **changes Meta and xAI** | Opens a calling window (1 to 60 minutes, 1 to 5 calls). Only if the owner gate is open; needs `confirm: true`; in live mode the `number` must equal `CALLING_GO_NUMBER` |
 | `disarm_calling` | changes Meta and xAI | Switches calling off now. Safe when nothing is armed |
@@ -61,4 +64,4 @@ Threat model and limits: [SECURITY.md](../SECURITY.md#admin-mcp-and-voice-callin
 
 ## What it does not protect against
 
-Anyone who holds `ADMIN_MCP_TOKEN` has all thirteen tools (including erase and arming inside the gate). Anyone who controls your Cloudflare account can read the secret. The rate limiter is best effort across Worker instances. Treat the token like a password: do not paste it into chat, a ticket or a repository, and rotate it by setting a new secret.
+Anyone who holds `ADMIN_MCP_TOKEN` has all seventeen tools (including erase and arming inside the gate). Anyone who controls your Cloudflare account can read the secret. The rate limiter is best effort across Worker instances. Treat the token like a password: do not paste it into chat, a ticket or a repository, and rotate it by setting a new secret.
