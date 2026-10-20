@@ -17,7 +17,7 @@ export interface Msg {
   media?: MediaInfo;
 }
 
-export type MediaKind = "audio" | "image";
+export type MediaKind = "audio" | "image" | "document";
 
 /** pending (job running) | done (text is a transcript/description) | skipped (cap or unavailable) | failed (download or Workers AI error) */
 export interface MediaInfo {

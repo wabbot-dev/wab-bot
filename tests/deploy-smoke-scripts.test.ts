@@ -1,6 +1,6 @@
 // scripts/deploy-cloudflare.sh and scripts/smoke.sh, run for real against fakes: a stub `npx` on PATH stands in for
 // wrangler, and a local HTTP server stands in for the Worker. No network, no Cloudflare, no real secret.
-import { existsSync, test } from "node:test";
+import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";

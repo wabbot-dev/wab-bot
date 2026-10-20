@@ -100,6 +100,11 @@ export interface Config {
   mediaMaxAudioBytes: number;
   /** MEDIA_MAX_IMAGE_BYTES (default 3 MB, up to 5 MB, Meta's own image limit) */
   mediaMaxImageBytes: number;
+  /** MEDIA_READ_DOCUMENTS (default on): extract the text of inbound PDF / Office / CSV / text documents with Workers AI toMarkdown (free for non-image files) */
+  mediaReadDocuments: boolean;
+  /** MEDIA_MAX_DOC_BYTES (default 2 MB, max 10 MB) and the most document characters handed to the agent (MEDIA_MAX_DOC_CHARS, default 3000) */
+  mediaMaxDocBytes: number;
+  mediaMaxDocChars: number;
   /** MEDIA_TIMEOUT_MS (default 18000, 2000 to 20000): Workers AI call timeout (each Graph request has its own 5 s) */
   mediaTimeoutMs: number;
   mediaSttModel: string;
@@ -237,6 +242,9 @@ export function loadConfig(env: Env): Config {
     mediaMaxAudioSeconds: intIn(env.MEDIA_MAX_AUDIO_SECONDS, 120, 5, 600),
     mediaMaxAudioBytes: intIn(env.MEDIA_MAX_AUDIO_BYTES, 2_000_000, 10_000, 16_000_000),
     mediaMaxImageBytes: intIn(env.MEDIA_MAX_IMAGE_BYTES, 3_000_000, 10_000, 5_000_000),
+    mediaReadDocuments: !/^(0|false|no|off)$/i.test(env.MEDIA_READ_DOCUMENTS?.trim() ?? ""),
+    mediaMaxDocBytes: intIn(env.MEDIA_MAX_DOC_BYTES, 2_000_000, 10_000, 10_000_000),
+    mediaMaxDocChars: intIn(env.MEDIA_MAX_DOC_CHARS, 3000, 200, 3800),
     mediaTimeoutMs: intIn(env.MEDIA_TIMEOUT_MS, 18000, 2000, 20000),
     mediaSttModel: modelName(env.MEDIA_STT_MODEL, DEFAULT_STT_MODEL),
     mediaVisionModel: modelName(env.MEDIA_VISION_MODEL, DEFAULT_VISION_MODEL),

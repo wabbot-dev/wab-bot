@@ -27,6 +27,9 @@ export interface Env {
   ELEVENLABS_MODEL_ID?: string;
   ELEVENLABS_MAX_CHARS?: string;
   VOICE_STYLE_TAG?: string;
+  MEDIA_READ_DOCUMENTS?: string;
+  MEDIA_MAX_DOC_BYTES?: string;
+  MEDIA_MAX_DOC_CHARS?: string;
   VOICE_PRONUNCIATIONS?: string;
   XAI_TTS_VOICE?: string;
   XAI_TTS_ARABIC_LOCALE?: string;

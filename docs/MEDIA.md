@@ -1,4 +1,4 @@
-# Voice notes and images (Workers AI)
+# Voice notes, images, documents and other inbound types (Workers AI)
 
 **Status: released in 0.3.0 (preview).** Evidence is listed at the end of this page; read [STATUS.md](STATUS.md) for the overall picture.
 
@@ -11,7 +11,19 @@ message keeps its WhatsApp type (`audio` or `image`). Nothing changes for text m
 [voice note, transcribed, language: ar] مرحبا، هل أنتم مفتوحون اليوم؟
 [image] description: A white cup of coffee on a saucer with a spoon. There is no text in the image. | caption: Do you have this?
 [voice note, not transcribed]                      <- anything went wrong: the agent asks the customer to type, as before
+[document "Price list.pdf", text extracted] # Price list ...
+[location: 33.8938, 35.5018; name: Main office; address: 1 Example St; map: https://maps.google.com/?q=33.8938,35.5018]
+[shared contact: Sam Example (Acme); phone: +1 555 0100 (WhatsApp 15550100); email: sam@example.test]
+[video, not watched: ask the customer to describe it if it matters] caption: ...
 ```
+
+**Documents** (PDF, Word `.docx`, Excel `.xlsx`/`.xls`, OpenDocument, CSV, plain text, HTML, XML) are downloaded from Meta like images and
+converted to text with Workers AI [Markdown conversion](https://developers.cloudflare.com/workers-ai/features/markdown-conversion/)
+(`env.AI.toMarkdown`), which converts these file types without a model and is free; image files are never sent to it. The first
+`MEDIA_MAX_DOC_CHARS` characters reach the agent. A scanned PDF (only images) gives "no text found". Other types (zip, audio files sent
+as documents, ...) get `[document "name", not read: ...]`. The file name is shown without any path. **Video** is not processed (no free
+video model): the agent sees a marker and the caption. **Shared contacts**, **locations** (coordinates, name, address and a map link)
+and **stickers** are turned into text directly from the webhook, with no download and no model.
 
 ## How it works
 
@@ -64,6 +76,9 @@ the features off (below) if you do not want that.
 | `MEDIA_MAX_AUDIO_SECONDS` | 120 (5 to 600) | longer voice notes are not transcribed; the duration is read from the Ogg/Opus file itself |
 | `MEDIA_MAX_AUDIO_BYTES` | 2000000 (up to 16 MB) | larger audio files are not downloaded (other audio formats rely on this cap) |
 | `MEDIA_MAX_IMAGE_BYTES` | 3000000 (up to 5 MB) | larger images are not downloaded |
+| `MEDIA_READ_DOCUMENTS` | on | `0`/`off` switches document reading off (`[document "name", not read]` plus the caption) |
+| `MEDIA_MAX_DOC_BYTES` | 2000000 (up to 10 MB) | larger documents are not downloaded |
+| `MEDIA_MAX_DOC_CHARS` | 3000 (200 to 3800) | how much of a document's text the agent gets |
 | `MEDIA_TIMEOUT_MS` | 18000 (2000 to 20000) | Workers AI call timeout; each Graph request has its own 5 seconds |
 | `MEDIA_STT_MODEL`, `MEDIA_VISION_MODEL` | see above | model names |
 | `MEDIA_SELFTEST` | off | `1` mounts the owner-only test route (below); leave it off |
