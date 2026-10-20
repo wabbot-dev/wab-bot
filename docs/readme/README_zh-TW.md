@@ -147,7 +147,7 @@ curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" https://<worker>.<your-su
 
 - **獨立專案。** WAB bot 是非官方專案：與 Meta、WhatsApp 或 xAI 沒有隸屬關係，也未獲其認可。WhatsApp 與 Grok 是其各自所有者的商標。
 - **適用 Meta 的規則。** 您使用 WhatsApp Cloud API 須遵守 Meta 的條款、訊息政策與每個號碼的規則；在商業號碼上啟用通話需要完成 Meta 商業驗證。
-- **一個機器人一個號碼。** 一次部署服務一家企業與一個 WhatsApp 號碼，使用您自己的 Meta 應用程式、權杖與 Cloudflare 帳號。
+- **一個機器人一個號碼。** 一次部署服務一家企業與一個 WhatsApp 號碼，使用您自己的 Meta 應用程式、權杖與 Cloudflare 帳號。如果新機器人要使用的 Meta 應用程式已在服務另一個機器人，設定不會做任何變更，並會請您在同一個企業組合中建立新的 Meta 應用程式。
 - **通話由您自行開啟。** 預設關閉；由您開啟並指明號碼，通話使用您自己的 xAI 額度（約 $0.08/分鐘）。
 - **僅限來電，不錄製音訊。** 不支援外撥與錄製音訊。預設保存文字逐字稿，您可以關閉。
 - **每個號碼上 SIP 與 Graph 通話 API 互斥。** 號碼使用 SIP 通話時（本機器人即如此），該號碼上無法使用 Meta 的 Graph 通話端點。
