@@ -40,7 +40,7 @@ same company never share state. Before deploying, both scripts check whether a W
   `CLOUDFLARE_ACCOUNT_ID` (`node scripts/cf-api-deploy.mjs check-name --name <name>`: exit 0 free, 3 taken), or `wrangler deployments list`.
 - `cf-api-deploy.mjs deploy`: refuses to upload over an existing Worker of that name unless `--update`.
 
-Then route only this bot's number to it: see [META-SETUP.md](META-SETUP.md#a-second-bot-on-the-same-meta-app-never-overwrite-the-first-bots-webhook).
+Then give this bot its own Meta app (a new app in the same business portfolio when another bot already uses yours): see [META-SETUP.md](META-SETUP.md#one-bot-per-meta-app-a-second-bot-gets-a-new-meta-app).
 
 **Shared Workers AI allowance.** The free 10,000 Neurons per day (voice notes, images, documents, voice replies) belong to the **Cloudflare
 account**, not to a Worker. Two bots in one account share them: when one bot uses them up (error 3036, until 00:00 UTC) the other falls back

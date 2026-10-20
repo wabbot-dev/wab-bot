@@ -63,7 +63,7 @@ node scripts/meta-setup.mjs --waba-id <id> --phone-number-id <id> \
   --webhook-url https://<worker>/api/webhook --verify-token <your verify token>
 ```
 
-It checks the token's scopes, tests your webhook handshake, sets the app-level callback, subscribes the app to the account and prints a result bundle with non-secret facts. Add `--push-cloudflare` to store the two secrets in a wrangler-managed Worker, or use self-provisioning ([SELF-PROVISIONING.md](SELF-PROVISIONING.md)). `--register` and `--test-to <number>` are the only steps that change the number or send a message, and they ask for confirmation. Details: [META-SETUP.md](META-SETUP.md). Which of these calls have been run against Meta: [META-API-CONFORMANCE.md](META-API-CONFORMANCE.md).
+It checks the token's scopes, tests your webhook handshake, sets the app-level callback (or, when the app already serves another bot, changes nothing and tells you to create a new Meta app for this bot: one bot per Meta app), subscribes the app to the account and prints a result bundle with non-secret facts. Add `--push-cloudflare` to store the two secrets in a wrangler-managed Worker, or use self-provisioning ([SELF-PROVISIONING.md](SELF-PROVISIONING.md)). `--register` and `--test-to <number>` are the only steps that change the number or send a message, and they ask for confirmation. Details: [META-SETUP.md](META-SETUP.md). Which of these calls have been run against Meta: [META-API-CONFORMANCE.md](META-API-CONFORMANCE.md).
 
 ## 8. Round trip before going live
 

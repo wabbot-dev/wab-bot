@@ -173,17 +173,38 @@ test("--waba-override sets and verifies the WABA-level callback", async () => {
   assert.equal(r.bundle.webhook.mode, "waba_override");
 });
 
-test("second bot on the same app: the first bot's app-level callback is never moved; only this number is routed here", async () => {
+test("one bot per Meta app (default): an app whose callback points to another bot is never touched; the answer is a new Meta app", async () => {
   const FIRST = "https://wab-bot-first.example.workers.dev/api/webhook";
   const r = await run(BASE, { existingAppCallback: FIRST }, { META_APP_SECRET: APP_SECRET });
-  assert.equal(st(r, "webhook_app_level"), "WARN");
+  assert.equal(st(r, "webhook_app_level"), "FAIL", r.err);
+  assert.equal(r.code, 1);
+  assert.equal(r.bundle.webhook.mode, "new_app_required");
+  assert.equal(r.bundle.newAppRequired.currentHost, "wab-bot-first.example.workers.dev");
+  assert.ok(r.bundle.newAppRequired.steps.length >= 3);
+  assert.ok(r.err.includes("NEW META APP REQUIRED"), "clear instruction printed");
+  assert.ok(!r.err.includes("MANUAL FALLBACK"), "never tells the owner to type this callback into the shared app's dashboard");
+  assert.equal(r.calls.filter((c) => c.method === "POST" && /\/subscriptions$/.test(c.url)).length, 0, "no app-level POST");
+  assert.equal(r.calls.filter((c) => c.method === "POST" && c.url.endsWith(`/${PHONE}`)).length, 0, "no per-number override by default");
+  assert.equal(st(r, "phone_override"), undefined);
+  assert.equal(st(r, "subscribe"), "SKIP");
+  assert.equal(r.calls.filter((c) => c.method === "POST").length, 0, "nothing written at Meta at all");
+  // seen through the number's own view even without the app secret; the other bot's token is never written or pushed
+  const n = await run([...BASE, "--write-secrets", "/nonexistent/x.env"], { existingAppCallback: FIRST });
+  assert.equal(st(n, "webhook_app_level"), "FAIL");
+  assert.equal(st(n, "secrets_file"), "SKIP");
+  assert.equal(n.bundle.secrets.writtenTo, null);
+});
+
+test("explicit --phone-override (fallback: one bot, several numbers on a shared app): only this number is routed here", async () => {
+  const FIRST = "https://wab-bot-first.example.workers.dev/api/webhook";
+  const r = await run([...BASE, "--phone-override"], { existingAppCallback: FIRST }, { META_APP_SECRET: APP_SECRET });
   assert.equal(st(r, "phone_override"), "PASS", r.err);
   assert.equal(r.bundle.webhook.mode, "phone_override");
   assert.equal(r.calls.filter((c) => c.method === "POST" && /\/subscriptions$/.test(c.url)).length, 0, "no app-level POST");
   const post = r.calls.find((c) => c.method === "POST" && c.url.endsWith(`/${PHONE}`))!;
   assert.equal(JSON.parse(post.body).webhook_configuration.override_callback_uri, URL_);
   // number already routed to a third deployment: refused
-  const t = await run(BASE, { existingAppCallback: FIRST, existingPhoneOverride: "https://third.example.test/api/webhook" }, { META_APP_SECRET: APP_SECRET });
+  const t = await run([...BASE, "--phone-override"], { existingAppCallback: FIRST, existingPhoneOverride: "https://third.example.test/api/webhook" }, { META_APP_SECRET: APP_SECRET });
   assert.equal(st(t, "phone_override"), "FAIL");
   assert.equal(t.calls.filter((c) => c.method === "POST" && c.url.endsWith(`/${PHONE}`)).length, 0);
   // explicit --replace-webhook moves the app level, reported as WARN

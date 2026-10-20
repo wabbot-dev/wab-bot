@@ -10,7 +10,7 @@ One template, three setups. The owner picks who the bot serves during setup (`BU
 
 A business that already runs a consumer bot can add a business bot as a second import (its own Worker and number, see
 [DEPLOY.md](DEPLOY.md#one-worker-per-bot-a-second-bot-in-the-same-account) and
-[META-SETUP.md](META-SETUP.md#a-second-bot-on-the-same-meta-app-never-overwrite-the-first-bots-webhook)), or run one bot with `both`.
+[META-SETUP.md](META-SETUP.md#one-bot-per-meta-app-a-second-bot-gets-a-new-meta-app)), or run one bot with `both`.
 
 Code: [lib/business.ts](../lib/business.ts). Tests: `tests/business.test.ts`.
 

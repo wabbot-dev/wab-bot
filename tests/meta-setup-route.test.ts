@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { FakeMeta, DRY_RUN_TOKEN, type FakeMetaOpts } from "../lib/meta-fake";
+import { FakeMeta, DRY_RUN_TOKEN, DRY_RUN_TOKEN_APP_IN_USE, type FakeMetaOpts } from "../lib/meta-fake";
 import { handleVerify } from "../lib/webhook";
 import { metaSetupGet, metaSetupPost, TIME_BUDGET_MS } from "../lib/meta-setup";
 import { Redactor } from "../lib/redact";
@@ -424,7 +424,7 @@ test("webhook: app-level set + read back through Meta's handshake against this d
   const nov = setup({ WA_VERIFY_TOKEN: undefined });
   r = await nov.call({ bootstrap_token: BOOT, steps: ["webhook"], app_secret: SECRET });
   assert.equal(step(r.json, "webhook_handshake_local").status, "FAIL");
-  assert.equal(nov.fm.calls.filter((c) => /subscriptions/.test(c.path)).length, 0);
+  assert.equal(nov.fm.calls.filter((c) => c.method === "POST" && /subscriptions/.test(c.path)).length, 0, "only the one-bot-per-app read happened; nothing written");
 
   // Meta's live handshake fails (callback unreachable) -> WARN + manual
   const hs = setup({}, { handshake: () => false });
@@ -471,18 +471,23 @@ test("setup stores the setup number in WA_PHONE_NUMBER_IDS when none is listed (
 });
 
 test("webhook guard: an app-level callback that points to ANOTHER deployment is never replaced silently", async () => {
-  // no phone id: refused, nothing changed
+  // default (auto): one bot per Meta app -> new_app_required before any write, nothing changed
   const a = setup({}, { phones: [{}] });
   a.fm.appSub = { object: "whatsapp_business_account", callback_url: OTHER, verify_token: "x", fields: ["messages"] };
   let r = await a.call({ bootstrap_token: BOOT, waba_id: a.fm.wabaId, steps: ["webhook"], app_secret: SECRET });
-  assert.equal(step(r.json, "webhook").status, "FAIL");
-  assert.equal(step(r.json, "webhook").facts.mode, "refused");
-  assert.equal(step(r.json, "webhook").facts.current_host, "wab-bot-first.example.test");
+  assert.equal(step(r.json, "app_in_use").status, "FAIL");
+  assert.equal(step(r.json, "app_in_use").facts.mode, "new_app_required");
+  assert.equal(step(r.json, "app_in_use").facts.current_host, "wab-bot-first.example.test");
+  assert.equal(step(r.json, "webhook").status, "SKIP");
+  assert.equal(r.json.new_app_required.current_host, "wab-bot-first.example.test");
+  assert.ok(r.json.new_app_required.steps.length >= 3);
+  assert.match(r.json.new_app_required.override, /webhook_scope "phone"/);
   assert.equal(a.fm.appSub?.callback_url, OTHER, "untouched");
   assert.equal(a.fm.post(/\/subscriptions$/).length, 0);
   // explicit app scope without confirmation: refused too
   r = await a.call({ bootstrap_token: BOOT, waba_id: a.fm.wabaId, steps: ["webhook"], app_secret: SECRET, webhook_scope: "app" });
   assert.equal(step(r.json, "webhook").status, "FAIL");
+  assert.equal(step(r.json, "webhook").facts.mode, "refused");
   assert.equal(a.fm.appSub?.callback_url, OTHER);
   // explicit confirmation: replaced, reported as WARN with the old host
   r = await a.call({ bootstrap_token: BOOT, waba_id: a.fm.wabaId, steps: ["webhook"], app_secret: SECRET, webhook_scope: "app", replace_webhook: true });
@@ -491,13 +496,26 @@ test("webhook guard: an app-level callback that points to ANOTHER deployment is 
   assert.equal(a.fm.appSub?.callback_url, "https://bridge.example.test/api/webhook");
 });
 
-test("webhook guard: second bot on the same Meta app gets a per-number override; the first bot keeps the app level", async () => {
+test("webhook guard: a second bot on an app that already serves a bot gets new_app_required by default; the per-number override only on request", async () => {
   const s2 = setup({}, { phones: [{}, {}] });
   const pn = s2.fm.phones[1]!.id;
   s2.fm.subscribedApps.push(s2.fm.appId);
   s2.fm.appSub = { object: "whatsapp_business_account", callback_url: OTHER, verify_token: "x", fields: ["messages"] };
-  let r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET });
-  assert.equal(step(r.json, "webhook_app_level").status, "WARN");
+  // default run (system user, subscription, webhook): stopped before any write
+  let r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, app_secret: SECRET });
+  assert.equal(step(r.json, "app_in_use").status, "FAIL");
+  assert.equal(r.json.ok, false);
+  assert.ok(r.json.results.filter((x: any) => x.id !== "preflight" && x.id !== "app_in_use").every((x: any) => x.status === "SKIP"), "every later step skipped; the number is not claimed");
+  assert.equal(s2.fm.calls.filter((c) => c.method === "POST").length, 0, "nothing written at Meta");
+  assert.equal(s2.fm.appSub?.callback_url, OTHER, "app level untouched");
+  assert.equal(s2.fm.phoneOverride[pn], undefined);
+  assert.ok(r.json.next.some((n: string) => /new Meta app/.test(n)));
+  // webhook step alone: same answer
+  r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET });
+  assert.equal(step(r.json, "app_in_use").facts.mode, "new_app_required");
+  // explicit fallback: webhook_scope "phone" routes only this number here
+  r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET, webhook_scope: "phone" });
+  assert.equal(step(r.json, "app_in_use"), undefined);
   assert.equal(step(r.json, "webhook").status, "PASS");
   assert.equal(step(r.json, "webhook").facts.mode, "phone");
   assert.equal(s2.fm.phoneOverride[pn], "https://bridge.example.test/api/webhook");
@@ -506,12 +524,13 @@ test("webhook guard: second bot on the same Meta app gets a per-number override;
   assert.equal(step(r.json, "webhook_effective").status, "PASS");
   const sent = s2.fm.calls.find((c) => c.method === "POST" && c.path === `/${pn}`)!;
   assert.deepEqual(JSON.parse(sent.form.webhook_configuration!), { override_callback_uri: "https://bridge.example.test/api/webhook", verify_token: VERIFY_TOKEN });
-  // idempotent
+  // a later auto re-run of that fallback is recognised (this number is already routed here) and stays idempotent
   r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET });
+  assert.equal(step(r.json, "app_in_use"), undefined);
   assert.equal(step(r.json, "webhook").facts.changed, false);
   // the number's events routed to a third deployment: refused without confirmation
   s2.fm.phoneOverride[pn] = "https://third.example.test/api/webhook";
-  r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET });
+  r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET, webhook_scope: "phone" });
   assert.equal(step(r.json, "webhook").status, "FAIL");
   assert.equal(s2.fm.phoneOverride[pn], "https://third.example.test/api/webhook");
   r = await s2.call({ bootstrap_token: BOOT, waba_id: s2.fm.wabaId, phone_number_id: pn, steps: ["webhook"], app_secret: SECRET, webhook_scope: "phone", replace_webhook: true });
@@ -525,7 +544,10 @@ test("webhook guard: the number's own view is read without the app secret; a WAB
   s3.fm.subscribedApps.push(s3.fm.appId);
   s3.fm.appSub = { object: "whatsapp_business_account", callback_url: OTHER, verify_token: "x", fields: ["messages"] };
   let r = await s3.call({ bootstrap_token: BOOT, waba_id: s3.fm.wabaId, phone_number_id: pn, steps: ["webhook"] });
-  assert.equal(step(r.json, "webhook").facts.mode, "phone", "no app secret, yet the other deployment is seen through the number");
+  assert.equal(step(r.json, "app_in_use").facts.mode, "new_app_required", "no app secret, yet the other deployment is seen through the number");
+  assert.equal(s3.fm.phoneOverride[pn], undefined);
+  r = await s3.call({ bootstrap_token: BOOT, waba_id: s3.fm.wabaId, phone_number_id: pn, steps: ["webhook"], webhook_scope: "phone" });
+  assert.equal(step(r.json, "webhook").facts.mode, "phone");
   assert.equal(s3.fm.phoneOverride[pn], "https://bridge.example.test/api/webhook");
   const w = setup({}, { phones: [{}] });
   w.fm.subscribedApps.push(w.fm.appId);
@@ -663,6 +685,16 @@ test("dry run (META_SETUP_DRY_RUN=1): invalid token fails safely and NO call goe
   assert.match(r.json.dry_run_notice, /nothing was sent/);
   assert.equal(h.net.calls.length, 0);
   assert.equal(h.net.graph.length, 0);
+  // the app-in-use stub token: the stub's app already serves another bot -> new_app_required, still offline
+  assert.equal(g.dry_run_token_app_in_use, DRY_RUN_TOKEN_APP_IN_USE);
+  r = await post({ steps: ["businesses", "waba", "system_user", "subscribed_apps", "webhook"], bootstrap_token: DRY_RUN_TOKEN_APP_IN_USE, app_secret: SECRET, mint_token: true, return_token: true });
+  assert.equal(r.json.ok, false);
+  assert.equal(r.json.results.find((x: any) => x.id === "app_in_use").facts.mode, "new_app_required");
+  assert.equal(r.json.new_app_required.current_host, "wab-bot-other-bot.example.invalid");
+  assert.equal(r.json.secret_delivery, undefined, "no token minted on the other bot's app");
+  r = await post({ steps: ["businesses", "waba", "system_user", "subscribed_apps", "webhook"], bootstrap_token: DRY_RUN_TOKEN_APP_IN_USE, app_secret: SECRET, webhook_scope: "phone" });
+  assert.equal(r.json.results.find((x: any) => x.id === "app_in_use"), undefined, "explicit override skips the stop");
+  assert.equal(h.net.calls.length, 0);
 });
 
 test("dry run keeps the safety checks: wrong admin token is still 401", async () => {
