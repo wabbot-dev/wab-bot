@@ -1,6 +1,9 @@
 /** Workers AI defaults for inbound media (docs/MEDIA.md). */
 export const DEFAULT_STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
 export const DEFAULT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
+/** Workers AI text-to-speech default for optional voice-note replies (docs/VOICE-REPLIES.md). */
+export const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
+export type VoiceRepliesMode = "off" | "mirror" | "on";
 
 export interface Config {
   waAccessToken?: string;
@@ -85,8 +88,21 @@ export interface Config {
   mediaTimeoutMs: number;
   mediaSttModel: string;
   mediaVisionModel: string;
-  /** MEDIA_SELFTEST=1 mounts the owner-only POST /api/admin/media-selftest (default OFF: 404) */
+  /** MEDIA_SELFTEST=1 mounts the owner-only POST /api/admin/media-selftest and /api/admin/voice-selftest (default OFF: 404) */
   mediaSelftest: boolean;
+  /**
+   * VOICE_REPLIES (default off): `mirror` (recommended) answers by voice note only when the customer's latest message was a voice
+   * note; `on` also lets the agent ask for a voice reply with send_reply reply_as "voice". The text is always stored, and any
+   * failure sends the text instead (docs/VOICE-REPLIES.md).
+   */
+  voiceReplies: VoiceRepliesMode;
+  voiceTtsModel: string;
+  /** VOICE_MAX_CHARS (default 400, 20 to 1500): longer replies go as text */
+  voiceMaxChars: number;
+  /** VOICE_MAX_SECONDS (default 45, 5 to 120): longer synthesized audio goes as text */
+  voiceMaxSeconds: number;
+  /** VOICE_TIMEOUT_MS (default 15000, 2000 to 20000): text-to-speech call timeout */
+  voiceTimeoutMs: number;
 }
 
 export const DEFAULT_WAKE_TYPES = [
@@ -105,6 +121,13 @@ function intIn(v: string | undefined, def: number, min: number, max: number): nu
   const n = Number(v);
   if (!Number.isFinite(n)) return def;
   return Math.min(max, Math.max(min, Math.floor(n)));
+}
+
+function voiceMode(v: string | undefined): VoiceRepliesMode {
+  const t = v?.trim().toLowerCase() ?? "";
+  if (t === "mirror") return "mirror";
+  if (/^(1|true|yes|on|always)$/.test(t)) return "on";
+  return "off";
 }
 
 const modelName = (v: string | undefined, def: string): string => (/^@(cf|hf)\/[A-Za-z0-9._\/-]{3,100}$/.test(v?.trim() ?? "") ? v!.trim() : def);
@@ -181,6 +204,11 @@ export function loadConfig(env: Env): Config {
     mediaSttModel: modelName(env.MEDIA_STT_MODEL, DEFAULT_STT_MODEL),
     mediaVisionModel: modelName(env.MEDIA_VISION_MODEL, DEFAULT_VISION_MODEL),
     mediaSelftest: env.MEDIA_SELFTEST?.trim() === "1",
+    voiceReplies: voiceMode(env.VOICE_REPLIES),
+    voiceTtsModel: modelName(env.VOICE_TTS_MODEL, DEFAULT_TTS_MODEL),
+    voiceMaxChars: intIn(env.VOICE_MAX_CHARS, 400, 20, 1500),
+    voiceMaxSeconds: intIn(env.VOICE_MAX_SECONDS, 45, 5, 120),
+    voiceTimeoutMs: intIn(env.VOICE_TIMEOUT_MS, 15000, 2000, 20000),
   };
 }
 

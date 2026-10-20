@@ -94,9 +94,9 @@ Every webhook must carry a valid `X-Hub-Signature-256` over the raw body. One SQ
 | Self-provision secrets once (`POST /api/setup`) for deploy tools that redact values | Run live on one test Worker; weaker than a secret binding ([limits](docs/SELF-PROVISIONING.md)) |
 | Answer WhatsApp voice calls (Meta SIP to xAI Grok Voice), off until the owner opens a gate; you pay xAI about $0.08 per minute | **Run live** from this code on Meta's test number on 2026-10-17: answered by the AI, two-way conversation, transcripts of both sides stored, the model's end-of-call request handled; not a business-verified production number ([voice](docs/VOICE-CALLS.md)) |
 | Owner-only admin MCP at `/admin/mcp`: status, setup check, redacted conversations, erase, arm and disarm calling, call logs, usage, version and update check (14 tools) | Off unless `ADMIN_MCP_TOKEN` is set. Tested locally and in workerd; **not** with real MCP clients ([admin MCP](docs/mcp.md)) |
-| Understand voice notes and images: transcribed (Arabic, French, English and more) or described with Workers AI in your own Cloudflare account, inside the free daily allowance; on any failure the agent sees a plain marker and asks the customer to type | Tested locally; run live through the owner self-test route on a test Worker, not yet from a real phone ([media](docs/MEDIA.md)) |
+| Understand voice notes and images: transcribed (Arabic, French, English and more) or described with Workers AI in your own Cloudflare account, inside the free daily allowance; on any failure the agent sees a plain marker and asks the customer to type; optional voice-note replies in English, French, Spanish, Chinese, Japanese and Korean, off by default | Tested locally; run live through the owner self-test route on a test Worker, not yet from a real phone ([media](docs/MEDIA.md)) |
 
-Not included: video and document understanding, voice replies, groups, template types beyond text and body parameters, outbound calls, audio recording, a settings page, preset routines, multi-tenant hosting. See [docs/ROADMAP.md](docs/ROADMAP.md).
+Not included: video and document understanding, Arabic voice replies, groups, template types beyond text and body parameters, outbound calls, audio recording, a settings page, preset routines, multi-tenant hosting. See [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Worked examples
 

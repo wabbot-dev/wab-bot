@@ -106,11 +106,9 @@ the sample is first uploaded to the number's own Meta media store (no message is
 media id with the stored token, exactly like a customer's file. Read the result with `get_history` or the inbox, erase it with
 `delete_conversation`, then remove `MEDIA_SELFTEST`.
 
-## Future option: voice replies (not built)
+## Voice replies
 
-Replying with a synthesized voice note (Workers AI text-to-speech, for example `@cf/myshell-ai/melotts` at about 19 Neurons per audio minute, or
-Deepgram Aura) is **not implemented**. If it is added later it must be a separate switch, **off by default**, follow the same untrusted-text and
-send guards as `send_reply`, and count against the same daily allowance.
+Answering with a voice note is a separate, optional feature, **off by default**: see [VOICE-REPLIES.md](VOICE-REPLIES.md).
 
 ## Evidence
 

@@ -10,6 +10,8 @@ import { staffReply, startConversation } from "./tools";
 import { randomHex } from "./crypto";
 import { runMediaJob, wantsMedia } from "./media";
 import { applyInbound } from "./webhook";
+import { claimConversation, getHistory, sendReply } from "./tools";
+import { isMonoOggOpus, synthesize, uploadVoice } from "./voice-reply";
 
 type Json = Record<string, unknown>;
 const iso = (ms: number | undefined) => (ms === undefined ? null : new Date(ms).toISOString());
@@ -312,4 +314,63 @@ export async function adminMediaSelftest(ctx: Ctx, req: Request): Promise<Respon
   const o = await runMediaJob(ctx, j, { wake: false });
   ctx.log("admin", { action: "media_selftest", kind, ok: o?.ok === true });
   return Response.json({ ok: o?.ok === true, conversation_id: r.conv, message_id: id, media_status: o?.media.st ?? null, reason: o?.ok === false ? o.code : null, language: o?.media.lang ?? null });
+}
+
+/**
+ * Owner-only voice-reply self-test (404 unless MEDIA_SELFTEST=1; docs/VOICE-REPLIES.md). Body: the reply text (UTF-8, up to 1500
+ * characters). Query: lang (two letters, required), where=do (default, the production path) or worker (encode in this request,
+ * to measure its CPU limit), upload=1 (upload to this number's Meta media store and read back Meta's mime type and size; nothing is
+ * sent), audio=1 (return the Ogg file itself instead of JSON, to inspect it), send=1&to=<digits> (ONE real voice reply through the
+ * full send_reply path to a TEST_RECIPIENTS number, test mode only, on a self-test conversation that is erased afterwards).
+ * Returns status, sizes and timings only.
+ */
+export async function adminVoiceSelftest(ctx: Ctx, req: Request): Promise<Response> {
+  if (!ctx.cfg.mediaSelftest) return Response.json({ error: "not_found" }, { status: 404 });
+  if (!ownerAuthorized(ctx, req)) return unauthorized();
+  const url = new URL(req.url);
+  const q = (k: string) => url.searchParams.get(k);
+  const lang = q("lang") ?? "";
+  const text = (await req.text()).trim();
+  if (!/^[a-z]{2}$/.test(lang) || !text || text.length > 1500) return bad();
+  const pn = ctx.cfg.phoneNumberIds[0];
+  if (q("send") === "1") {
+    const to = (q("to") ?? "").replace(/\D/g, "");
+    if (ctx.cfg.launchMode === "live" || !ctx.cfg.testRecipients.includes(to)) return Response.json({ ok: false, error: "send_only_to_test_recipients_in_test_mode" });
+    if (!pn) return Response.json({ ok: false, error: "needs_phone_number_id" });
+    const vctx: Ctx = { ...ctx, cfg: { ...ctx.cfg, voiceReplies: "mirror" } };
+    const r = await applyInbound(vctx, { pn, waba: ctx.cfg.wabaId ?? "selftest", wa: to }, [
+      { id: `selftest.${randomHex(8)}`, type: "audio", text: `[voice note, transcribed, language: ${lang}] (voice reply self-test)`, ts: ctx.now(), name: "voice self-test" },
+    ], { selftest: true });
+    const cl = await claimConversation(vctx, r.conv);
+    if (cl.ok !== true) return Response.json({ ok: false, error: "claim_failed", conversation_id: r.conv });
+    await getHistory(vctx, r.conv, String(cl.lease), 5);
+    const t0 = Date.now();
+    const res = await sendReply(vctx, { conversation_id: r.conv, lease: String(cl.lease), text, voice_language: lang, idempotency_key: `voice-selftest-${randomHex(6)}` });
+    const ms = Date.now() - t0;
+    const snap = await ctx.store.get<Conv>(convKeyOf(r.conv));
+    const sent = snap?.value.messages.filter((m) => m.dir === "out").pop();
+    const erased = await eraseConversationResult(ctx, r.conv);
+    ctx.log("admin", { action: "voice_selftest_send", ok: res.ok === true });
+    return Response.json({ ok: res.ok === true, result: res, message_id: sent?.id ?? null, stored_type: sent?.type ?? null, stored_text_kept: sent?.text === text, wall_ms: ms, erased: erased.status === 200 });
+  }
+  const where = q("where") === "worker" ? "worker" : "do";
+  const t0 = Date.now();
+  const s = await synthesize(ctx, text, lang, where === "worker" ? "inline" : "do");
+  const t1 = Date.now();
+  if (!s.ok) return Response.json({ ok: false, error: s.code, ms: t1 - t0 });
+  if (q("audio") === "1") return new Response(s.ogg as unknown as BodyInit, { headers: { "content-type": "audio/ogg; codecs=opus", "cache-control": "no-store" } });
+  const out: Json = { ok: true, lang, model: ctx.cfg.voiceTtsModel, where, tts_and_encode_ms: t1 - t0, tts_bytes: s.ttsBytes, ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, mono_ogg_opus: isMonoOggOpus(s.ogg) };
+  if (q("upload") === "1") {
+    if (!pn || !ctx.cfg.waAccessToken) return Response.json({ ...out, ok: false, error: "needs_phone_number_id_and_token" });
+    const up = await uploadVoice(ctx, pn, s.ogg);
+    if (!up.ok) return Response.json({ ...out, ok: false, error: up.code });
+    let meta: { mime_type?: unknown; file_size?: unknown } = {};
+    try {
+      const r = await ctx.fetch(`https://graph.facebook.com/${ctx.cfg.graphVersion}/${encodeURIComponent(up.id)}`, { headers: { Authorization: `Bearer ${ctx.cfg.waAccessToken}` } });
+      meta = (await r.json().catch(() => ({}))) as typeof meta;
+    } catch { /* reported as nulls */ }
+    out.upload = { media_id_returned: true, meta_mime_type: typeof meta.mime_type === "string" ? meta.mime_type : null, meta_file_size: typeof meta.file_size === "number" ? meta.file_size : null, ms: Date.now() - t1 };
+  }
+  ctx.log("admin", { action: "voice_selftest", where, ok: true });
+  return Response.json(out);
 }

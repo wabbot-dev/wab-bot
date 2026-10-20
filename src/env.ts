@@ -16,6 +16,11 @@ export interface Env {
   MEDIA_STT_MODEL?: string;
   MEDIA_VISION_MODEL?: string;
   MEDIA_SELFTEST?: string;
+  VOICE_REPLIES?: string;
+  VOICE_TTS_MODEL?: string;
+  VOICE_MAX_CHARS?: string;
+  VOICE_MAX_SECONDS?: string;
+  VOICE_TIMEOUT_MS?: string;
   // secrets (wrangler secret put)
   WA_ACCESS_TOKEN?: string;
   WA_APP_SECRET?: string;

@@ -47,6 +47,7 @@ check "GET /api/cron/retry-wakes (no token)" 401 "$BASE/api/cron/retry-wakes"
 check "POST /api/webhook unsigned"         401 -X POST -H 'Content-Type: application/json' -d '{}' "$BASE/api/webhook"
 check "GET /api/admin/meta-setup (off by default)" 404 "$BASE/api/admin/meta-setup"
 check "POST /api/admin/media-selftest (off by default)" 404 -X POST -d 'x' "$BASE/api/admin/media-selftest?kind=audio"
+check "POST /api/admin/voice-selftest (off by default)" 404 -X POST -d 'x' "$BASE/api/admin/voice-selftest?lang=en"
 check "DELETE /api/admin/conversations/<id> (no token)" 401 -X DELETE "$BASE/api/admin/conversations/c_00000000000000000000"
 if [ "$fail" != 0 ]; then
   echo "SMOKE FAILED: ${#failed[@]} check(s) still wrong after retrying for up to ${RETRY_SECONDS}s (SMOKE_RETRY_SECONDS):" >&2

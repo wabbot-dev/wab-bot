@@ -4,6 +4,7 @@ import type { Ctx } from "./ctx";
 import { scrub } from "./admin-mcp";
 import { getOverview, type SecretsInfo } from "./overview";
 import { InvalidParams, serveJsonRpc, type Args, type ToolMeta } from "./mcp-rpc";
+import type { ReplyAs } from "./voice-reply";
 import {
   claimConversation, escalateConversation, finishConversation, getControls, getHistory, listPending,
   releaseConversation, sendReply, startConversation,
@@ -71,7 +72,9 @@ const TOOLS: Tool[] = [
   {
     name: "send_reply",
     description:
-      "Send a reply to the customer of this conversation (recipient is fixed by the server; there is no 'to'). Provide text OR template_name. All safety guards are enforced server-side.",
+      "Send a reply to the customer of this conversation (recipient is fixed by the server; there is no 'to'). Provide text OR template_name. All safety guards are enforced server-side. " +
+      "Voice notes (only if the owner turned VOICE_REPLIES on): reply_as \"auto\" (default) speaks the text when the customer's latest message was a voice note, \"voice\" asks for it (mode `on` only), \"text\" never speaks. " +
+      "The text is always stored; if speaking fails or the language has no voice (Arabic, for example) the text is sent instead and the result says sent_as \"text\" with voice_fallback.",
     inputSchema: obj(
       {
         conversation_id: convSchema,
@@ -81,11 +84,17 @@ const TOOLS: Tool[] = [
         template_language: { type: "string", maxLength: 20 },
         template_params: { type: "array", maxItems: 20, items: { type: "string", maxLength: 1000 } },
         idempotency_key: { type: "string", maxLength: 100 },
+        reply_as: { type: "string", enum: ["auto", "text", "voice"], description: "auto (default), text, or voice; see the tool description" },
+        voice_language: { type: "string", pattern: "^[a-z]{2}$", description: "language of the text for the voice, e.g. en, fr, es (optional; detected from the customer's voice note otherwise)" },
       },
       ["conversation_id", "lease"],
     ),
     run: (ctx, a) => {
       const tp = a.template_params;
+      const ra = a.reply_as;
+      if (ra !== undefined && ra !== "auto" && ra !== "text" && ra !== "voice") throw new InvalidParams("reply_as must be auto, text or voice");
+      const vl = a.voice_language;
+      if (vl !== undefined && (typeof vl !== "string" || !/^[a-z]{2}$/.test(vl))) throw new InvalidParams("voice_language must be a two-letter code such as en");
       if (tp !== undefined && (!Array.isArray(tp) || tp.length > 20 || tp.some((x) => typeof x !== "string" || x.length > 1000))) throw new InvalidParams("template_params must be up to 20 strings of at most 1000 characters");
       return sendReply(ctx, {
         conversation_id: conv(a)!,
@@ -95,6 +104,8 @@ const TOOLS: Tool[] = [
         template_language: str(a, "template_language", { max: 20 }),
         template_params: tp as string[] | undefined,
         idempotency_key: str(a, "idempotency_key", { max: 100 }),
+        reply_as: ra as ReplyAs | undefined,
+        voice_language: vl as string | undefined,
       });
     },
   },

@@ -43,7 +43,7 @@ Read this page before you trust WAB bot with customers. Every claim in this repo
 
 ## Known limits
 
-- Voice notes and images are transcribed / described with Workers AI (unreleased, [MEDIA.md](MEDIA.md#evidence): tested locally and run live through the owner self-test route, including Meta's media store; not yet from a real phone). Video and documents: type and caption only. Templates: text and body-parameter only. No groups. No voice calls in the bridge itself.
+- Voice notes and images are transcribed / described with Workers AI (unreleased, [MEDIA.md](MEDIA.md#evidence): tested locally and run live through the owner self-test route, including Meta's media store; not yet from a real phone). Optional voice-note replies (off by default, [VOICE-REPLIES.md](VOICE-REPLIES.md#evidence)): run live on a test Worker, including one real send to the test phone that Meta accepted; the bubble on the phone is not yet confirmed; no Arabic voice. Video and documents: type and caption only. Templates: text and body-parameter only. No groups. No voice calls in the bridge itself.
 - Escalated and taken-over chats never wake the agent; staff watch `/admin`. Lease expiry is lazy.
 - Single tenant, one Durable Object (all writes serialised, one row per conversation): not for high volume. Many simultaneous messages for the **same** conversation contend on one row and can get 503 (Meta redelivers).
 - Reactions are stored but neither wake the agent nor reopen the 24-hour window.

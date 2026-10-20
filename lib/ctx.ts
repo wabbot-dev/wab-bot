@@ -2,6 +2,7 @@ import type { Config } from "./config";
 import type { Logger } from "./log";
 import type { AiRunner } from "./media";
 import type { Store, UpdateDeps } from "./store";
+import type { VoiceEncoder, VoiceSpeaker } from "./voice-reply";
 
 /** Everything the bridge logic needs from the outside world. Injected so tests can fake time and network. */
 export interface Ctx extends UpdateDeps {
@@ -16,6 +17,10 @@ export interface Ctx extends UpdateDeps {
   log: Logger;
   /** Workers AI binding (wrangler.toml [ai]); absent = media understanding is unavailable and falls back to markers */
   ai?: AiRunner;
+  /** optional voice-note replies: text-to-speech + Ogg Opus encoding, run in a Durable Object for the CPU budget (lib/voice-reply.ts) */
+  speakVoice?: VoiceSpeaker;
+  /** the same encoder in this request's own isolate: owner self-test only (measures the per-request CPU limit) */
+  encodeVoiceInline?: VoiceEncoder;
   /** per-instance volatile state (never relied on for correctness) */
   state: VolatileState;
 }

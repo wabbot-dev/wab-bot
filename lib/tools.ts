@@ -10,6 +10,7 @@ import { normDigits } from "./config";
 import { readAll, update, updateMulti } from "./store";
 import type { Conv, HourCounter, OutRec } from "./types";
 import { armedOf, runWake, settleWakeOnClaim } from "./wake";
+import { chooseVoice, prepareVoice, recordVoice, type ReplyAs } from "./voice-reply";
 
 type Json = Record<string, unknown>;
 
@@ -117,6 +118,10 @@ export interface SendArgs {
   template_language?: string;
   template_params?: string[];
   idempotency_key?: string;
+  /** optional voice-note reply (docs/VOICE-REPLIES.md): "auto" (default) follows VOICE_REPLIES, "text" never speaks, "voice" asks for it */
+  reply_as?: ReplyAs;
+  /** language of the text for the voice (ISO 639-1, e.g. "en", "fr"); the script of the text wins when it is not Latin */
+  voice_language?: string;
 }
 
 function unseenError(c: Conv): Json {
@@ -142,7 +147,7 @@ function blockedState(c: Conv): string | null {
 }
 
 /** What to send: text OR an allowlisted template. Checked before any Meta call; `windowOk` = the 24-hour window is open. */
-interface Content { isTemplate: boolean; text: string; template_name?: string; template_language?: string; template_params?: string[] }
+interface Content { isTemplate: boolean; text: string; template_name?: string; template_language?: string; template_params?: string[]; voiceMediaId?: string }
 function contentOf(cfg: Ctx["cfg"], a: { text?: string; template_name?: string; template_language?: string; template_params?: string[] }): Content | Json {
   if (a.template_name) {
     if (!cfg.templateAllowlist.includes(a.template_name)) return { ok: false, error: "template_not_allowlisted" };
@@ -178,12 +183,12 @@ function reserveSlots(ctx: Ctx, c: Conv, h: HourCounter | null, replyKey: string
   if (hc >= cfg.rateGlobalPerHour) return { ok: false, error: "rate_limited_global" };
   c.sends.push(now);
   c.outs[replyKey] = {
-    key: replyKey, status: "sending", kind: content.isTemplate ? "template" : "text", origin,
+    key: replyKey, status: "sending", kind: content.isTemplate ? "template" : content.voiceMediaId ? "voice" : "text", origin,
     template: content.isTemplate ? content.template_name : undefined, createdAt: now, updatedAt: now,
   };
   pruneOuts(c);
   c.messages.push({
-    id: `pending:${replyKey}`, dir: "out", type: content.isTemplate ? "template" : "text",
+    id: `pending:${replyKey}`, dir: "out", type: content.isTemplate ? "template" : content.voiceMediaId ? "audio" : "text",
     text: content.isTemplate ? `[template ${content.template_name}]` : content.text, ts: now, status: "sending", rk: replyKey,
   });
   capMessages(c, cfg.maxMessages);
@@ -214,6 +219,10 @@ export async function deliver(ctx: Ctx, d: { id: string; replyKey: string; to: s
         ? { components: [{ type: "body", parameters: content.template_params.map((t) => ({ type: "text", text: t })) }] }
         : {}),
     };
+  } else if (content.voiceMediaId) {
+    // voice-note reply: the text itself is stored in history (reserveSlots) but only the audio goes to the customer
+    payload.type = "audio";
+    payload.audio = { id: content.voiceMediaId, voice: true };
   } else {
     payload.type = "text";
     payload.text = { preview_url: false, body: content.text };
@@ -339,6 +348,24 @@ export async function sendReply(ctx: Ctx, a: SendArgs): Promise<Json> {
   if (recent >= cfg.rateConvMax) return { ok: false, error: "rate_limited_conversation" };
   // 11 token
   if (!cfg.waAccessToken) return { ok: false, error: "not_configured_access_token_missing" };
+  // 11b optional voice note (VOICE_REPLIES): speech, encoding and the Meta upload happen BEFORE the reserve commit, so a slow
+  // model never leaves a 'sending' record behind; any failure here simply sends the text (nothing is retried).
+  let voiceFallback: string | undefined;
+  let voiceInfo: { seconds: number } | undefined;
+  if (!content.isTemplate) {
+    const choice = chooseVoice(cfg, c0, a.reply_as);
+    if (choice.voice) {
+      const p = await prepareVoice(ctx, c0, content.text, a.voice_language);
+      if (p.ok) {
+        content.voiceMediaId = p.mediaId;
+        voiceInfo = { seconds: p.seconds };
+      } else {
+        voiceFallback = p.code;
+        ctx.log("voice", { conv: id, ok: false, code: p.code });
+        await recordVoice(ctx, { voice_fallback: 1, ...p.count }, p.code);
+      }
+    } else if (choice.reason) voiceFallback = choice.reason;
+  }
   // 12-14 ONE atomic commit (single put): lease + unseen re-checked, create-only reply record (concurrent send,
   // same key), per-conversation rate slot AND the global hourly slot are taken together, so there is nothing to refund.
   const reserve = await updateMulti<Json & { ok: boolean }>(
@@ -364,7 +391,17 @@ export async function sendReply(ctx: Ctx, a: SendArgs): Promise<Json> {
     { ttl: { [hk]: 7200 }, seed: snap0 },
   );
   if (!reserve.result.ok) return reserve.result;
-  return deliver(ctx, { id, replyKey, to: String(reserve.result.wa_id), pn: String(reserve.result.phone_number_id), content, origin: "reply" });
+  const res = await deliver(ctx, { id, replyKey, to: String(reserve.result.wa_id), pn: String(reserve.result.phone_number_id), content, origin: "reply" });
+  if (content.isTemplate) return res;
+  if (content.voiceMediaId) {
+    if (res.ok === true) await recordVoice(ctx, { voice_sent: 1, voice_seconds: Math.round(voiceInfo?.seconds ?? 0), voice_chars: content.text.length });
+    else if (typeof res.error === "string" && res.error.startsWith("send_rejected_http_")) {
+      await recordVoice(ctx, { voice_send_rejected: 1 }, "voice_send_rejected");
+      return { ...res, sent_as: "voice", hint: "Meta refused the voice note; nothing was sent. Send the same text again with reply_as \"text\" and a new idempotency_key." };
+    }
+    return { ...res, sent_as: "voice" };
+  }
+  return { ...res, sent_as: "text", ...(voiceFallback ? { voice_fallback: voiceFallback } : {}) };
 }
 
 // ---------------------------------------------------------------- start_conversation (bot-started message)

@@ -7,6 +7,8 @@ import { stateStub } from "./do-backend";
 import type { Env } from "./env";
 import { getCtx } from "./runtime";
 import { ensureSecrets } from "./setup";
+import { encodeInIsolate } from "./voice-wasm";
+import { speak, type SpeakArgs, type SpeakResult } from "../lib/voice-reply";
 
 /**
  * One Durable Object per voice call (named by xAI's call id). It owns the realtime socket for the length of the call: a Worker request
@@ -46,6 +48,24 @@ export class CallSession extends DurableObject<Env> {
     );
     await this.runner.start();
     return { ok: true };
+  }
+
+  /**
+   * Text-to-speech + Ogg Opus encoding for optional voice replies (docs/VOICE-REPLIES.md). It runs here, in a Durable Object named
+   * "voice-note-encoder" that holds no call and no storage, because decoding the model's audio and encoding it needs more CPU than a
+   * Workers Free request allows (10 ms) while a Durable Object invocation gets 30 s. Text in, Ogg Opus bytes out; nothing is stored or logged.
+   */
+  async speakVoice(a: SpeakArgs): Promise<SpeakResult> {
+    if (!this.env.AI) return { ok: false, code: "voice_unavailable", count: {} };
+    const ai = this.env.AI;
+    const runner = { run: (model: string, input: Record<string, unknown>) => ai.run(model as Parameters<Ai["run"]>[0], input as never) as Promise<unknown> };
+    return speak(runner, encodeInIsolate, {
+      text: String(a.text).slice(0, 1500),
+      lang: String(a.lang),
+      model: String(a.model),
+      maxSeconds: Math.min(120, Math.max(1, Math.floor(a.maxSeconds))),
+      timeoutMs: Math.min(20000, Math.max(1000, Math.floor(a.timeoutMs))),
+    });
   }
 
   /** max-duration backstop. With no live runner (the object was evicted mid-call) it hangs up and closes the log itself. */

@@ -18,6 +18,6 @@ This page lists what is deliberately not in v0.1.0 and what is planned. Nothing 
 | Retention pass over more than 100 conversations per run | Open | Known limitation |
 | Voice notes and images | Built (unreleased) | Transcribed / described with Workers AI, raw media never stored ([MEDIA.md](MEDIA.md)) |
 | Video, documents, stickers | Not planned | Type and caption only |
-| Voice replies (synthesized voice notes) | Possible later, would be off by default | Not built; see [MEDIA.md](MEDIA.md#future-option-voice-replies-not-built) |
+| Voice-note replies (synthesized voice notes) | Built (unreleased), off by default | Workers AI text-to-speech plus an in-Worker Ogg Opus encoder; no Arabic voice on Workers AI yet ([VOICE-REPLIES.md](VOICE-REPLIES.md)) |
 
 Want something here sooner, or something that is not listed? Open a [design discussion](https://github.com/wabbot-dev/wab-bot/issues/new?template=design_discussion.yml) or a feature request, starting from the problem. Read the [contribution scope](../CONTRIBUTING.md#contribution-scope) first.

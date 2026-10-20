@@ -1,4 +1,6 @@
 import { loadConfig, type Env as ConfigEnv } from "../lib/config";
+import type { SpeakResult } from "../lib/voice-reply";
+import { encodeInIsolate } from "./voice-wasm";
 import type { Ctx, VolatileState } from "../lib/ctx";
 import { newVolatileState } from "../lib/ctx";
 import { consoleLog } from "../lib/log";
@@ -51,6 +53,10 @@ export function getCtx(env: Env, exec: Pick<ExecutionContext, "waitUntil">): Ctx
     },
     log: consoleLog,
     // Workers AI binding ([ai] in wrangler.toml). Only lib/media.ts calls it, only for inbound voice notes and images.
+    // Optional voice-note replies: text-to-speech and the Ogg Opus encoder run in a Durable Object (30 s CPU per invocation), not in
+    // this request (10 ms CPU on Workers Free); only the finished Ogg file (tens of KB) comes back.
+    speakVoice: (a) => env.CALLS.get(env.CALLS.idFromName("voice-note-encoder")).speakVoice(a) as Promise<SpeakResult>,
+    encodeVoiceInline: encodeInIsolate,
     ai: env.AI ? { run: (model, input) => env.AI!.run(model as Parameters<Ai["run"]>[0], input as never) as Promise<unknown> } : undefined,
     state: s.state,
   };

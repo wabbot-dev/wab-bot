@@ -25,6 +25,8 @@ describe("auth on every protected endpoint", () => {
   it("the media self-test route is off (404) unless MEDIA_SELFTEST=1, even with the owner token", async () => {
     expect((await call("/api/admin/media-selftest?kind=audio", { method: "POST", headers: bearer(ADMIN_TOKEN), body: "x" })).status).toBe(404);
     expect((await call("/api/admin/media-selftest?kind=audio", { method: "GET", headers: bearer(ADMIN_TOKEN) })).status).toBe(405);
+    expect((await call("/api/admin/voice-selftest?lang=en", { method: "POST", headers: bearer(ADMIN_TOKEN), body: "x" })).status).toBe(404);
+    expect((await call("/api/admin/voice-selftest?lang=en", { method: "GET", headers: bearer(ADMIN_TOKEN) })).status).toBe(405);
   });
   it("an MCP token is not an admin token and vice versa", async () => {
     expect((await call("/api/admin", { headers: bearer(MCP_TOKEN) })).status).toBe(401);

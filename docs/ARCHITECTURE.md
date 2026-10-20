@@ -27,6 +27,7 @@ flowchart LR
 | Secrets | `lib/secrets.ts`, `lib/config.ts` | A real binding wins over a stored value; values are never logged or returned |
 | Retention and erase | `lib/retention.ts`, `lib/admin.ts` | Compaction on write plus a daily pass; erase flags and drops one conversation in the same commit |
 | Voice notes and images | `lib/media.ts` | Runs after the webhook's 200, once per new message id; the WhatsApp token goes only to Meta hosts; raw media is never stored or logged; every failure falls back to a marker with no retry; the Workers AI binding reaches `lib/` only as a small interface ([MEDIA.md](MEDIA.md)) |
+| Voice-note replies (optional) | `lib/voice-reply.ts`, `lib/voice-encode.ts` | Off by default; every send guard first; text-to-speech and the WebAssembly Ogg Opus encoder run in a Durable Object for the CPU budget; any failure sends the text ([VOICE-REPLIES.md](VOICE-REPLIES.md)) |
 | Agent wake | `lib/wake.ts` | Payload is ids and counters only; failures back off; only the holder of the wake's runner token fires it |
 
 See [STATE-STORE.md](STATE-STORE.md) for the storage design and retention, [CONFIGURATION.md](CONFIGURATION.md) for endpoints, tools and guards, and [CLOUDFLARE.md](CLOUDFLARE.md) for the hosting account and limits.

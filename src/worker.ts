@@ -1,5 +1,5 @@
 import pkg from "../package.json" with { type: "json" };
-import { adminErase, adminGet, adminMediaSelftest, adminPost, adminStartConversation, staffLogin, staffLogout, staffSession } from "../lib/admin";
+import { adminErase, adminGet, adminMediaSelftest, adminVoiceSelftest, adminPost, adminStartConversation, staffLogin, staffLogout, staffSession } from "../lib/admin";
 import { handleCron } from "../lib/cron";
 import { createAdminMcpRoute } from "../lib/admin-mcp";
 import { disarmCalling, sweepCalling, type ArmDeps } from "../lib/calls-arm";
@@ -102,6 +102,8 @@ async function route(req: Request, env: Env, exec: ExecutionContext): Promise<Re
       return m === "POST" ? adminStartConversation(ctx(), req) : methodNotAllowed("POST");
     case "/api/admin/media-selftest": // owner-only, 404 unless MEDIA_SELFTEST=1 (docs/MEDIA.md)
       return m === "POST" ? adminMediaSelftest(ctx(), req) : methodNotAllowed("POST");
+    case "/api/admin/voice-selftest": // owner-only, 404 unless MEDIA_SELFTEST=1 (docs/VOICE-REPLIES.md)
+      return m === "POST" ? adminVoiceSelftest(ctx(), req) : methodNotAllowed("POST");
     case "/api/staff/login":
       return m === "POST" ? staffLogin(ctx(), req) : methodNotAllowed("POST");
     case "/api/staff/logout":

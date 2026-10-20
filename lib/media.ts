@@ -30,6 +30,9 @@ export { DEFAULT_STT_MODEL, DEFAULT_VISION_MODEL } from "./config";
 export const FREE_NEURONS_PER_DAY = 10_000;
 /** Published rates for the default models (same page). Used only for the estimate in get_overview. */
 export const NEURONS_PER_AUDIO_MINUTE: Record<string, number> = { "@cf/openai/whisper-large-v3-turbo": 46.63, "@cf/openai/whisper": 41.14 };
+/** text-to-speech: per audio minute (melotts) or per 1,000 input characters (Deepgram Aura), same pricing page */
+export const NEURONS_PER_TTS_MINUTE: Record<string, number> = { "@cf/myshell-ai/melotts": 18.63 };
+export const NEURONS_PER_TTS_1K_CHARS: Record<string, number> = { "@cf/deepgram/aura-1": 1363.64, "@cf/deepgram/aura-2-en": 2727.27, "@cf/deepgram/aura-2-es": 2727.27 };
 export const NEURONS_PER_M_TOKENS: Record<string, { in: number; out: number }> = {
   "@cf/meta/llama-4-scout-17b-16e-instruct": { in: 24545, out: 77273 },
   "@cf/meta/llama-3.2-11b-vision-instruct": { in: 4410, out: 61493 },
@@ -60,6 +63,22 @@ export interface MediaCounts {
   audio_seconds: number;
   vision_input_tokens: number;
   vision_output_tokens: number;
+  /** optional voice-note replies (lib/voice-reply.ts): sent as a voice note */
+  voice_sent: number;
+  /** a voice reply was wanted but the text went instead (any reason below, or a cap) */
+  voice_fallback: number;
+  /** of voice_fallback: text-to-speech failed (Workers AI error, timeout, empty audio) */
+  voice_tts_failed: number;
+  /** of voice_fallback: the in-Worker Ogg Opus encoder failed */
+  voice_encode_failed: number;
+  /** of voice_fallback: the upload to Meta's media store failed */
+  voice_upload_failed: number;
+  /** of voice_fallback: the reply's language has no text-to-speech voice (Arabic, for example) */
+  voice_language_unsupported: number;
+  /** Meta refused the voice-note message itself (definitive 4xx); nothing was sent */
+  voice_send_rejected: number;
+  voice_seconds: number;
+  voice_chars: number;
 }
 export interface MediaMetrics {
   /** UTC day of `today` (the Workers AI allowance resets at 00:00 UTC) */
@@ -74,6 +93,8 @@ export interface MediaMetrics {
 export const zeroCounts = (): MediaCounts => ({
   transcribed: 0, described: 0, too_large: 0, download_failed: 0, ai_failed: 0, ai_quota_exhausted: 0, ai_paid_only: 0, unavailable: 0,
   audio_seconds: 0, vision_input_tokens: 0, vision_output_tokens: 0,
+  voice_sent: 0, voice_fallback: 0, voice_tts_failed: 0, voice_encode_failed: 0, voice_upload_failed: 0, voice_language_unsupported: 0,
+  voice_send_rejected: 0, voice_seconds: 0, voice_chars: 0,
 });
 export const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 
@@ -240,9 +261,9 @@ export function aiErrorCode(e: unknown): { code: string; count: Partial<MediaCou
   return { code: m ? `ai_${m[1]}` : "ai_error", count: { ai_failed: 1 } };
 }
 
-async function runAi(ctx: Ctx, model: string, input: Record<string, unknown>): Promise<unknown> {
+export async function runAi(ctx: Ctx, model: string, input: Record<string, unknown>, ms = ctx.cfg.mediaTimeoutMs): Promise<unknown> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Fail("ai_timeout", "", { ai_failed: 1 })), ctx.cfg.mediaTimeoutMs); });
+  const timeout = new Promise<never>((_, rej) => { timer = setTimeout(() => rej(new Fail("ai_timeout", "", { ai_failed: 1 })), ms); });
   try {
     return await Promise.race([ctx.ai!.run(model, input), timeout]);
   } finally {
@@ -309,6 +330,11 @@ function add(a: MediaCounts, b: Partial<MediaCounts>) {
 }
 
 export async function recordMetrics(ctx: Ctx, o: Outcome): Promise<void> {
+  await recordCounts(ctx, o.count, o.ok ? undefined : o.code);
+}
+
+/** Add to today's (UTC) and the running counters; `failure` (a short code) becomes last_failure_code. */
+export async function recordCounts(ctx: Ctx, count: Partial<MediaCounts>, failure?: string): Promise<void> {
   await update<MediaMetrics, null>(ctx, MEDIA_METRICS_KEY, (cur) => {
     const now = ctx.now();
     const day = utcDay(now);
@@ -316,9 +342,9 @@ export async function recordMetrics(ctx: Ctx, o: Outcome): Promise<void> {
     if (m.day !== day) { m.day = day; m.today = zeroCounts(); }
     m.today = { ...zeroCounts(), ...m.today };
     m.total = { ...zeroCounts(), ...m.total };
-    add(m.today, o.count);
-    add(m.total, o.count);
-    if (!o.ok) { m.last_failure_at = now; m.last_failure_code = o.code.slice(0, 40); }
+    add(m.today, count);
+    add(m.total, count);
+    if (failure) { m.last_failure_at = now; m.last_failure_code = failure.slice(0, 40); }
     return { next: m, result: null };
   });
 }

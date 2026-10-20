@@ -54,7 +54,7 @@ export interface OutRec {
   key: string;
   status: OutStatus;
   wamid?: string;
-  kind: "text" | "template";
+  kind: "text" | "template" | "voice";
   /** who started the send: the agent's reply (default), a bot-started message (start_conversation) or a staff reply from the inbox */
   origin?: "reply" | "outreach" | "staff";
   template?: string;
