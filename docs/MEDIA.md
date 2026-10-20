@@ -106,7 +106,7 @@ working: voice notes and images get the fallback marker and `get_overview` shows
 - Transcripts and descriptions are **customer content**: stored like message text, shown to the agent inside `<untrusted_customer_text>`, erased with the conversation, never logged. Treat them exactly like typed text: an image or a voice note can contain instructions, and the agent must not follow them.
 - Machine transcription and description can be wrong. Whisper sometimes adds a short phrase that was not said at the end of a clip (seen live: a stray subtitle credit after a French sample). The agent should confirm order details, amounts, dates and names with the customer.
 - Media goes from Meta to your Worker to Workers AI, all inside your own Cloudflare account. Cloudflare's terms for Workers AI apply.
-- Video, documents and stickers are still stored as type only.
+- Documents are read (see above); a video is noted with its caption but not watched; stickers are noted as `[sticker]`.
 
 ## Owner self-test route
 
