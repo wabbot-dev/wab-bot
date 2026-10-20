@@ -96,6 +96,8 @@ export async function getHistory(ctx: Ctx, id: string, lease: string, limit = 20
         at: iso(m.ts),
         status: m.status ?? null,
         text: m.dir === "in" ? wrapUntrusted(m.text) : m.text,
+        // voice note / image understanding (docs/MEDIA.md): the text above is the transcript or description, still untrusted
+        ...(m.media ? { media: { status: m.media.st, language: m.media.lang ?? null } } : {}),
       })),
     };
     if (c.inSeq <= seenUpTo(c)) return { next: undefined, result: view };

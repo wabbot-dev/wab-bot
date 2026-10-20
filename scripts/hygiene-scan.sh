@@ -75,7 +75,8 @@ check "account or zone id (32 hex)" '\b[0-9a-f]{32}\b' '0123456789abcdef01234567
 # The Vercel/Next.js version was replaced; no stale host references may remain.
 check "stale host reference"         'vercel|next\.js|nextjs|@vercel/|blob store|\.vercel\.app' '' '-niIE'
 # The voice architecture is Grok Voice (xAI) only for now; no other voice provider may be mentioned.
-check "out-of-scope voice provider"  'openai|gpt-realtime|gpt-live|elevenlabs|eleven labs' '' '-niIE'
+# Allowed: the Workers AI speech-to-text model id (@cf/openai/whisper-...), which runs in the owner's own Cloudflare account, not an outside provider.
+check "out-of-scope voice provider"  'openai|gpt-realtime|gpt-live|elevenlabs|eleven labs' '@cf/openai/whisper' '-niIE'
 check "internal tooling name"        '/workspace|\bbus/|rea-src|spike-a|spike-b|mailbox alias' '' '-niIE'
 [ $fail -eq 0 ] && echo "hygiene: clean ($(echo "$files" | wc -l) tracked files scanned)"
 exit $fail

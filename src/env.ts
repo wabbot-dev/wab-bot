@@ -5,6 +5,17 @@ import type { BridgeState } from "./state-do";
 export interface Env {
   STATE: DurableObjectNamespace<BridgeState>;
   CALLS: DurableObjectNamespace<CallSession>;
+  // Workers AI ([ai] binding in wrangler.toml): voice-note transcription and image description (docs/MEDIA.md). Optional.
+  AI?: Ai;
+  MEDIA_TRANSCRIBE?: string;
+  MEDIA_DESCRIBE?: string;
+  MEDIA_MAX_AUDIO_SECONDS?: string;
+  MEDIA_MAX_AUDIO_BYTES?: string;
+  MEDIA_MAX_IMAGE_BYTES?: string;
+  MEDIA_TIMEOUT_MS?: string;
+  MEDIA_STT_MODEL?: string;
+  MEDIA_VISION_MODEL?: string;
+  MEDIA_SELFTEST?: string;
   // secrets (wrangler secret put)
   WA_ACCESS_TOKEN?: string;
   WA_APP_SECRET?: string;

@@ -4,6 +4,7 @@ import { armWake, capMessages, convId, convKeyOf, MAX_SEEN_IDS, newConv, normali
 import { normDigits } from "./config";
 import { isStoreBusy, REJECTIONS_KEY, update } from "./store";
 import type { Conv, Msg, OutRec } from "./types";
+import { fallbackText, pendingText, runMediaJob, wantsMedia, type MediaJob, type RawMedia } from "./media";
 import { armedOf, maybeRetryInBackground, runWake, type Armed } from "./wake";
 
 export { REJECTIONS_KEY };
@@ -54,7 +55,8 @@ interface RawMsg {
   text?: { body?: string };
   interactive?: { button_reply?: { title?: string }; list_reply?: { title?: string } };
   button?: { text?: string };
-  image?: { caption?: string };
+  image?: RawMedia;
+  audio?: RawMedia;
   video?: { caption?: string };
   document?: { caption?: string };
   reaction?: { emoji?: string };
@@ -87,12 +89,33 @@ interface StatusEv {
   errors?: { code?: number }[];
 }
 
-interface Incoming {
+export interface Incoming {
   id: string;
   type: string;
   text: string;
   ts: number;
   name?: string;
+  /** set for an audio/image message that will be transcribed/described in the background (lib/media.ts) */
+  media?: Omit<MediaJob, "convId" | "msgId">;
+}
+
+/** A voice note waits for its transcript before the agent is woken: the wake is armed this far out and fired early when the job ends. */
+export const MEDIA_WAKE_WAIT_MS = 25000;
+
+/**
+ * Inbound audio/image with media understanding on: a background job will replace the placeholder text. Without the AI binding or
+ * the WhatsApp token the fallback marker is stored at once (no job, no delay).
+ */
+function mediaIncoming(ctx: Ctx, m: RawMsg, base: Incoming): Incoming {
+  const kind = wantsMedia(ctx, base.type);
+  if (!kind) return base;
+  const raw = kind === "audio" ? m.audio : m.image;
+  const caption = kind === "image" && raw?.caption ? String(raw.caption).slice(0, 1000) : undefined;
+  const job = { kind, voice: kind === "audio" && raw?.voice === true, caption, mediaId: typeof raw?.id === "string" ? raw.id : undefined, mime: typeof raw?.mime_type === "string" ? raw.mime_type : undefined };
+  if (!ctx.ai || !ctx.cfg.waAccessToken || !job.mediaId) {
+    return { ...base, text: fallbackText(job) };
+  }
+  return { ...base, text: pendingText(job), media: job };
 }
 
 /** Opt-out keywords (whole message, trimmed, case-insensitive). START clears an opt-out. */
@@ -111,13 +134,15 @@ function tsMs(sec: string | undefined, now: number): number {
   return Number.isFinite(n) && n > 0 ? Math.min(now, n * 1000) : now;
 }
 
-async function applyInbound(
+export async function applyInbound(
   ctx: Ctx,
   meta: { pn: string; waba: string; wa: string },
   incoming: Incoming[],
-): Promise<{ added: number; dup: number }> {
+  /** selftest: owner media self-test (lib/admin.ts): arm no wake and leave the returned jobs to the caller */
+  opts: { selftest?: boolean } = {},
+): Promise<{ added: number; dup: number; conv: string; jobs: MediaJob[] }> {
   const id = convId(meta.pn, meta.waba, meta.wa);
-  const r = await update<Conv, { added: number; dup: number; armed: Armed | null }>(ctx, convKeyOf(id), (cur) => {
+  const r = await update<Conv, { added: number; dup: number; armed: Armed | null; jobs: MediaJob[] }>(ctx, convKeyOf(id), (cur) => {
     const now = ctx.now();
     const c = cur ?? newConv(meta.pn, meta.waba, meta.wa, now);
     normalize(c, now);
@@ -125,6 +150,7 @@ async function applyInbound(
     let added = 0;
     let dup = 0;
     let wakeable = false;
+    const jobs: MediaJob[] = [];
     for (const m of incoming) {
       const sk = seenKey(m.id);
       if (c.seenIds.includes(sk)) { dup++; continue; }
@@ -132,6 +158,10 @@ async function applyInbound(
       c.seenIds.push(sk);
       const reaction = m.type === "reaction";
       const msg: Msg = { id: m.id, dir: "in", type: m.type, text: m.text, ts: m.ts };
+      if (m.media) {
+        msg.media = { kind: m.media.kind, st: "pending" };
+        jobs.push({ ...m.media, convId: id, msgId: m.id });
+      }
       if (!reaction) {
         msg.seq = ++c.inSeq;
         c.lastInboundAt = Math.max(c.lastInboundAt ?? 0, m.ts);
@@ -146,18 +176,22 @@ async function applyInbound(
     }
     if (c.seenIds.length > MAX_SEEN_IDS) c.seenIds.splice(0, c.seenIds.length - MAX_SEEN_IDS);
     capMessages(c, ctx.cfg.maxMessages);
-    if (added === 0) return { next: undefined, result: { added, dup, armed: null } };
+    if (added === 0) return { next: undefined, result: { added, dup, armed: null, jobs: [] } };
     let armed: Armed | null = null;
     if (wakeable && c.state === "replied") c.state = "pending";
-    // a conversation that just (re)entered "pending" always gets a fresh wake; inside a burst the first one stands
-    if (wakeable && c.state === "pending" && armWake(c, now, now + ctx.cfg.wakeDebounceMs, was !== "pending")) armed = armedOf(c);
+    // a conversation that just (re)entered "pending" always gets a fresh wake; inside a burst the first one stands.
+    // With a voice note/image being understood, the wake waits for the job (which fires it early) up to MEDIA_WAKE_WAIT_MS.
+    const due = now + (jobs.length ? Math.max(ctx.cfg.wakeDebounceMs, MEDIA_WAKE_WAIT_MS) : ctx.cfg.wakeDebounceMs);
+    if (!opts.selftest && wakeable && c.state === "pending" && armWake(c, now, due, was !== "pending" || jobs.length > 0)) armed = armedOf(c);
     c.updatedAt = now;
-    return { next: c, result: { added, dup, armed } };
+    return { next: c, result: { added, dup, armed, jobs } };
   });
-  ctx.log("inbound", { conv: id, added: r.result.added, dup: r.result.dup, armed: !!r.result.armed });
+  ctx.log("inbound", { conv: id, added: r.result.added, dup: r.result.dup, armed: !!r.result.armed, media: r.result.jobs.length });
+  // One background job per NEW media message (a redelivery was deduped above and gets none). It fires the wake early when done.
+  if (!opts.selftest) for (const j of r.result.jobs) ctx.schedule(async () => { await runMediaJob(ctx, j); });
   const armed = r.result.armed;
   if (armed) ctx.schedule(() => runWake(ctx, armed));
-  return r.result;
+  return { added: r.result.added, dup: r.result.dup, conv: id, jobs: r.result.jobs };
 }
 
 function findOut(c: Conv, wamid: string | undefined, rk: string | undefined): OutRec | undefined {
@@ -263,7 +297,7 @@ export async function handleWebhookPost(ctx: Ctx, req: Request): Promise<Respons
             const from = normDigits(m.from);
             if (from === pn || (own && from === own)) continue; // echo of our own number
             const list = byWa.get(from) ?? [];
-            list.push({ id: m.id, type, text: extractText(m), ts: tsMs(m.timestamp, now), name: names.get(from) });
+            list.push(mediaIncoming(ctx, m, { id: m.id, type, text: extractText(m), ts: tsMs(m.timestamp, now), name: names.get(from) }));
             byWa.set(from, list);
           }
           // Started together so the store coalesces them into ONE put (group commit); every one is awaited before answering.

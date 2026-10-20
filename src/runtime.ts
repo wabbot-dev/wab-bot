@@ -50,6 +50,8 @@ export function getCtx(env: Env, exec: Pick<ExecutionContext, "waitUntil">): Ctx
       );
     },
     log: consoleLog,
+    // Workers AI binding ([ai] in wrangler.toml). Only lib/media.ts calls it, only for inbound voice notes and images.
+    ai: env.AI ? { run: (model, input) => env.AI!.run(model as Parameters<Ai["run"]>[0], input as never) as Promise<unknown> } : undefined,
     state: s.state,
   };
 }

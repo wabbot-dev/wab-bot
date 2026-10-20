@@ -13,6 +13,20 @@ export interface Msg {
   seq?: number;
   /** reply key for outbound messages (links to Conv.outs) */
   rk?: string;
+  /** inbound voice note / image: understanding status (lib/media.ts). The text above carries the transcript or description. */
+  media?: MediaInfo;
+}
+
+export type MediaKind = "audio" | "image";
+
+/** pending (job running) | done (text is a transcript/description) | skipped (cap or unavailable) | failed (download or Workers AI error) */
+export interface MediaInfo {
+  kind: MediaKind;
+  st: "pending" | "done" | "skipped" | "failed";
+  /** language detected by speech-to-text (ISO 639-1), when known */
+  lang?: string;
+  /** short code only (too_long, ai_3036, download_http_404 ...), never content */
+  reason?: string;
 }
 
 /**

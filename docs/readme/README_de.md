@@ -96,8 +96,9 @@ Jeder Webhook muss eine gültige `X-Hub-Signature-256` über den rohen Body trag
 | Geheimnisse einmalig selbst bereitstellen (`POST /api/setup`) für Deploy-Tools, die Werte schwärzen | Live auf einem Test-Worker ausgeführt; schwächer als ein Secret-Binding ([Grenzen](../SELF-PROVISIONING.md)) |
 | WhatsApp-Sprachanrufe beantworten (Meta SIP zu xAI Grok Voice), aus, bis der Eigentümer das Tor öffnet; Sie zahlen xAI etwa $0.08 pro Minute | **Live ausgeführt** mit diesem Code am 2026-10-17 auf Metas Testnummer: von der KI angenommen, Gespräch in beide Richtungen, Transkripte beider Seiten gespeichert, Gesprächsende-Anfrage des Modells verarbeitet; keine geschäftsverifizierte Produktionsnummer ([Sprache](../VOICE-CALLS.md)) |
 | Admin-MCP nur für den Eigentümer unter `/admin/mcp`: Status, Einrichtungsprüfung, geschwärzte Unterhaltungen, Löschen, Anrufe scharf- und abschalten, Anrufprotokolle, Nutzung, Version und Update-Prüfung (14 Werkzeuge) | Aus, solange `ADMIN_MCP_TOKEN` nicht gesetzt ist. Lokal und in workerd getestet; **nicht** mit echten MCP-Clients ([Admin-MCP](../mcp.md)) |
+| Sprachnachrichten und Bilder verstehen: mit Workers AI im eigenen Cloudflare-Konto transkribiert (Arabisch, Französisch, Englisch und mehr) oder beschrieben, im kostenlosen Tageskontingent; bei jedem Fehler sieht der Agent eine einfache Markierung und bittet den Kunden zu tippen | Lokal getestet; live über die Selbsttest-Route des Inhabers auf einem Test-Worker ausgeführt, noch nicht von einem echten Telefon ([Medien](../MEDIA.md)) |
 
-Nicht enthalten: Medien-Download, Gruppen, Vorlagentypen jenseits von Text und Body-Parametern, ausgehende Anrufe, Audioaufzeichnung, eine Einstellungsseite, voreingestellte Routinen, Multi-Tenant-Hosting. Siehe [docs/ROADMAP.md](../ROADMAP.md).
+Nicht enthalten: Video- und Dokumentverständnis, Sprachantworten, Gruppen, Vorlagentypen jenseits von Text und Body-Parametern, ausgehende Anrufe, Audioaufzeichnung, eine Einstellungsseite, voreingestellte Routinen, Multi-Tenant-Hosting. Siehe [docs/ROADMAP.md](../ROADMAP.md).
 
 ## Praxisbeispiele
 

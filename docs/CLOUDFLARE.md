@@ -32,6 +32,7 @@ From Cloudflare's [limits](https://developers.cloudflare.com/workers/platform/li
 | SQLite stored data | 5 GB total |
 | Cron Triggers per account | 5 |
 | Workers Logs | 200,000 events per day, 3 days retention (Observability pricing applies from 2026-12-01) |
+| Workers AI (voice notes and images, [MEDIA.md](MEDIA.md)) | 10,000 Neurons per day (resets 00:00 UTC; past it requests fail with error 3036, nothing is billed on Free). About 214 minutes of voice notes or about 190 photos a day with the default models ([pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/), 2026-10-20) |
 
 Past a Free limit the operation fails until 00:00 UTC; there is no automatic charge. A customer message costs about 3 Durable Object calls and about 3 rows written in our live test, so the Durable Object limit allows very roughly 30,000 messages a day. The upgrade path is Workers Paid (from $5 per month); the code does not change. Handlers are light (HMAC check, small JSON, one Durable Object hop) and measured Worker CPU stayed flat as stored data grew (see [STATUS.md](STATUS.md)), but individual requests (cold starts, contended retries) exceeded 10 ms in our runs without being terminated. That does not prove the limit is never enforced on Free; do not rely on it.
 
@@ -41,6 +42,7 @@ Other things to know:
 - **`WAKE_URL` on your own `workers.dev`.** A Worker cannot `fetch` another Worker on the same zone unless the `global_fetch_strictly_public` compatibility flag is set (error 1042 otherwise). It is set in `wrangler.toml`; an external agent URL is unaffected.
 - **Do not use KV as the state store** (eventually consistent, no compare-and-swap, 1,000 writes per day on Free) and avoid R2 (needs a payment method even on its free tier). This template uses neither.
 - **Data location.** Workers run near the caller; Free has no data-residency guarantee. Message text is stored in your Durable Object ([PRIVACY.md](PRIVACY.md)).
+- **Workers AI needs no extra setup and no extra token permission**: the `[ai]` binding in `wrangler.toml` is uploaded with the Worker (the 2026-10-20 test deploy with a Workers Scripts: Edit token worked). On the Free plan the bridge cannot cause a Workers AI charge; on Workers Paid, usage past the 10,000 daily Neurons is billed ($0.011 per 1,000), so set `MEDIA_TRANSCRIBE=0` / `MEDIA_DESCRIBE=0` if you do not want that.
 - **Cloudflare is your processor** for customer personal data under its terms and Data Processing Addendum; you are the controller.
 
 ## API token permissions

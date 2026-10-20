@@ -1,5 +1,6 @@
 import type { Config } from "./config";
 import type { Logger } from "./log";
+import type { AiRunner } from "./media";
 import type { Store, UpdateDeps } from "./store";
 
 /** Everything the bridge logic needs from the outside world. Injected so tests can fake time and network. */
@@ -13,6 +14,8 @@ export interface Ctx extends UpdateDeps {
   /** Run background work after the response (ExecutionContext.waitUntil on Cloudflare). */
   schedule(task: () => Promise<void>, label?: "wake" | "maintenance"): void;
   log: Logger;
+  /** Workers AI binding (wrangler.toml [ai]); absent = media understanding is unavailable and falls back to markers */
+  ai?: AiRunner;
   /** per-instance volatile state (never relied on for correctness) */
   state: VolatileState;
 }

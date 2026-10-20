@@ -1,3 +1,7 @@
+/** Workers AI defaults for inbound media (docs/MEDIA.md). */
+export const DEFAULT_STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
+export const DEFAULT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
+
 export interface Config {
   waAccessToken?: string;
   waAppSecret?: string;
@@ -67,6 +71,22 @@ export interface Config {
   metaSetupEnabled: boolean;
   /** META_SETUP_DRY_RUN=1: the /api/admin/meta-setup route talks to a built-in Meta stub and NEVER to graph.facebook.com */
   metaSetupDryRun: boolean;
+  /** MEDIA_TRANSCRIBE (default ON): transcribe inbound voice notes / audio with Workers AI (docs/MEDIA.md) */
+  mediaTranscribe: boolean;
+  /** MEDIA_DESCRIBE (default ON): describe inbound images with a Workers AI vision model */
+  mediaDescribe: boolean;
+  /** MEDIA_MAX_AUDIO_SECONDS (default 120, 5 to 600): longer voice notes are not transcribed (Ogg Opus duration is read from the file) */
+  mediaMaxAudioSeconds: number;
+  /** MEDIA_MAX_AUDIO_BYTES (default 2 MB, up to 16 MB) */
+  mediaMaxAudioBytes: number;
+  /** MEDIA_MAX_IMAGE_BYTES (default 3 MB, up to 5 MB, Meta's own image limit) */
+  mediaMaxImageBytes: number;
+  /** MEDIA_TIMEOUT_MS (default 18000, 2000 to 20000): Workers AI call timeout (each Graph request has its own 5 s) */
+  mediaTimeoutMs: number;
+  mediaSttModel: string;
+  mediaVisionModel: string;
+  /** MEDIA_SELFTEST=1 mounts the owner-only POST /api/admin/media-selftest (default OFF: 404) */
+  mediaSelftest: boolean;
 }
 
 export const DEFAULT_WAKE_TYPES = [
@@ -86,6 +106,8 @@ function intIn(v: string | undefined, def: number, min: number, max: number): nu
   if (!Number.isFinite(n)) return def;
   return Math.min(max, Math.max(min, Math.floor(n)));
 }
+
+const modelName = (v: string | undefined, def: string): string => (/^@(cf|hf)\/[A-Za-z0-9._\/-]{3,100}$/.test(v?.trim() ?? "") ? v!.trim() : def);
 
 /** The wake key travels to WAKE_URL, so only https is accepted (http only for localhost dev). Anything else disables wake. */
 export function safeWakeUrl(v: string | undefined): string | undefined {
@@ -150,6 +172,15 @@ export function loadConfig(env: Env): Config {
     callInstructions: env.CALL_INSTRUCTIONS?.trim().slice(0, 4000) || undefined,
     metaSetupEnabled: env.META_SETUP_ENABLED?.trim() === "1",
     metaSetupDryRun: env.META_SETUP_DRY_RUN?.trim() === "1",
+    mediaTranscribe: !/^(0|false|no|off)$/i.test(env.MEDIA_TRANSCRIBE?.trim() ?? ""),
+    mediaDescribe: !/^(0|false|no|off)$/i.test(env.MEDIA_DESCRIBE?.trim() ?? ""),
+    mediaMaxAudioSeconds: intIn(env.MEDIA_MAX_AUDIO_SECONDS, 120, 5, 600),
+    mediaMaxAudioBytes: intIn(env.MEDIA_MAX_AUDIO_BYTES, 2_000_000, 10_000, 16_000_000),
+    mediaMaxImageBytes: intIn(env.MEDIA_MAX_IMAGE_BYTES, 3_000_000, 10_000, 5_000_000),
+    mediaTimeoutMs: intIn(env.MEDIA_TIMEOUT_MS, 18000, 2000, 20000),
+    mediaSttModel: modelName(env.MEDIA_STT_MODEL, DEFAULT_STT_MODEL),
+    mediaVisionModel: modelName(env.MEDIA_VISION_MODEL, DEFAULT_VISION_MODEL),
+    mediaSelftest: env.MEDIA_SELFTEST?.trim() === "1",
   };
 }
 

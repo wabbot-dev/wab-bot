@@ -123,7 +123,7 @@ test("deploy --self-provision: everything set -> exit 0 and 'Done. Setup is lock
 });
 
 // ---- scripts/smoke.sh ----
-const EXPECTED: Record<string, number> = { "/": 200, "/api/health": 200, "/api/admin": 401, "/mcp": 401, "/api/webhook:GET": 403, "/api/cron/retry-wakes": 401, "/api/webhook:POST": 401, "/api/admin/meta-setup": 404, "/api/admin/conversations/c_00000000000000000000": 401 };
+const EXPECTED: Record<string, number> = { "/": 200, "/api/health": 200, "/api/admin": 401, "/mcp": 401, "/api/webhook:GET": 403, "/api/cron/retry-wakes": 401, "/api/webhook:POST": 401, "/api/admin/meta-setup": 404, "/api/admin/media-selftest": 404, "/api/admin/conversations/c_00000000000000000000": 401 };
 async function fakeWorker(badRequests: number) {
   let seen = 0;
   const srv = createServer((req, res) => {
@@ -142,7 +142,7 @@ test("smoke: passes first time against a healthy Worker", async () => {
   try {
     const r = await smoke(w.url, { SMOKE_RETRY_SECONDS: "0" });
     assert.equal(r.code, 0, r.out + r.err);
-    assert.equal((r.out.match(/^PASS /gm) ?? []).length, 9);
+    assert.equal((r.out.match(/^PASS /gm) ?? []).length, 10);
   } finally { await w.close(); }
 });
 

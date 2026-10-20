@@ -4,6 +4,10 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Features
+- **Voice notes and images** ([docs/MEDIA.md](docs/MEDIA.md)): inbound audio is transcribed with Workers AI `@cf/openai/whisper-large-v3-turbo` (language detected, for example Arabic, French, English) and inbound images are described with `@cf/meta/llama-4-scout-17b-16e-instruct`, in the background after the webhook's 200, once per message id. The text is stored on the message (type kept) and reaches the agent through `get_history` as untrusted customer text (`[voice note, transcribed, language: ar] ...`, `[image] description: ... | caption: ...`). The agent's wake waits for the job (at most 25 s). Caps `MEDIA_MAX_AUDIO_SECONDS` (120), `MEDIA_MAX_AUDIO_BYTES` (2 MB), `MEDIA_MAX_IMAGE_BYTES` (3 MB); any failure, including the free daily allowance being used up (error 3036), gives `[voice note, not transcribed]` / `[image, not described]` with no retry. Switches `MEDIA_TRANSCRIBE`, `MEDIA_DESCRIBE` (default on). `get_overview` gains a `media` block (counters only). New `[ai]` binding in `wrangler.toml` and `scripts/cf-api-deploy.mjs`. Raw media is never stored or logged.
+- Owner-only `POST /api/admin/media-selftest` (404 unless `MEDIA_SELFTEST=1`) to check the media path without a phone; `scripts/smoke.sh` checks that it is off.
+
 ## [0.2.0] - 2026-10-19 (preview)
 
 ### Features

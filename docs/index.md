@@ -16,6 +16,7 @@
 | Look up an endpoint, guard or environment variable | [CONFIGURATION.md](CONFIGURATION.md) |
 | Understand storage, retention and wake | [STATE-STORE.md](STATE-STORE.md) |
 | Know what is stored and how to delete it | [PRIVACY.md](PRIVACY.md) |
+| Understand customers' voice notes and images (Workers AI, free daily allowance) | [MEDIA.md](MEDIA.md) |
 | Answer WhatsApp voice calls (off by default, owner-gated) | [VOICE-CALLS.md](VOICE-CALLS.md) |
 | Check on my deployment, arm calling or read call logs through an owner-only MCP | [mcp.md](mcp.md) |
 | Fix a problem | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |

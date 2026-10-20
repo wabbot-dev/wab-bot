@@ -96,8 +96,9 @@ Todo webhook deve trazer um `X-Hub-Signature-256` válido sobre o corpo bruto. U
 | Autoprovisionar segredos uma vez (`POST /api/setup`) para ferramentas de deploy que ocultam valores | Executado ao vivo em um Worker de teste; mais fraco que um secret binding ([limites](../SELF-PROVISIONING.md)) |
 | Atender chamadas de voz do WhatsApp (Meta SIP para xAI Grok Voice), desligado até o proprietário abrir a comporta; você paga à xAI, cerca de $0.08 por minuto | **Rodou ao vivo** com este código em 2026-10-17 no número de teste da Meta: atendido pela IA, conversa nos dois sentidos, transcrições dos dois lados guardadas, pedido de fim de chamada do modelo tratado; não é um número de produção verificado como empresa ([voz](../VOICE-CALLS.md)) |
 | MCP de administração só para o proprietário em `/admin/mcp`: status, verificação de configuração, conversas ocultadas, exclusão, armar e desarmar chamadas, registros de chamadas, uso, versão e verificação de atualização (14 ferramentas) | Desligado, a menos que `ADMIN_MCP_TOKEN` seja definido. Testado localmente e no workerd; **não** com clientes MCP reais ([MCP de administração](../mcp.md)) |
+| Entender mensagens de voz e imagens: transcritas (árabe, francês, inglês e mais) ou descritas com Workers AI na sua própria conta Cloudflare, dentro da cota gratuita diária; em qualquer falha o agente vê um marcador simples e pede ao cliente que digite | Testado localmente; executado ao vivo pela rota de autoteste do proprietário em um Worker de teste, ainda não de um telefone real ([mídia](../MEDIA.md)) |
 
-Não incluído: download de mídia, grupos, tipos de template além de texto e parâmetros do corpo, chamadas de saída, gravação de áudio, uma página de configurações, rotinas predefinidas, hospedagem multi-inquilino. Veja [docs/ROADMAP.md](../ROADMAP.md).
+Não incluído: compreensão de vídeo e documentos, respostas por voz, grupos, tipos de template além de texto e parâmetros do corpo, chamadas de saída, gravação de áudio, uma página de configurações, rotinas predefinidas, hospedagem multi-inquilino. Veja [docs/ROADMAP.md](../ROADMAP.md).
 
 ## Exemplos práticos
 

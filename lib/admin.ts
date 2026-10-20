@@ -7,6 +7,9 @@ import type { Conv, Rejections } from "./types";
 import { armedOf, kickPendingWakes, runWake, type Armed } from "./wake";
 import { createInvite, redeemInvite, SESSION_MS, sessionCookie, sessionOf, sessionValue } from "./staff";
 import { staffReply, startConversation } from "./tools";
+import { randomHex } from "./crypto";
+import { runMediaJob, wantsMedia } from "./media";
+import { applyInbound } from "./webhook";
 
 type Json = Record<string, unknown>;
 const iso = (ms: number | undefined) => (ms === undefined ? null : new Date(ms).toISOString());
@@ -253,4 +256,60 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
   if (f && r.wrote) ctx.schedule(() => runWake(ctx, f));
   const status = r.result.error === "not_found" ? 404 : 200;
   return Response.json(r.result, { status });
+}
+
+/** Fake, reserved-range customer number of the media self-test conversation (never a real person). */
+export const SELFTEST_WA = "15550100099";
+
+/**
+ * POST /api/admin/media-selftest?kind=audio|image[&voice=1][&caption=...][&via=graph] (Bearer ADMIN_TOKEN only; 404 unless MEDIA_SELFTEST=1).
+ * via=graph first uploads the sample to the number's own Meta media store and then downloads it by media id (the real webhook path).
+ * The body is the media file itself (sample audio or image). It runs the SAME understanding path as a WhatsApp message (caps,
+ * Workers AI, fallback, counters) and stores the result as an inbound message in a self-test conversation with a fake number,
+ * WITHOUT waking the agent. Read it with get_history (or the inbox), then erase it with delete_conversation. Nothing is sent to
+ * WhatsApp and the bytes are never stored. Answers status codes only, never the transcript.
+ */
+export async function adminMediaSelftest(ctx: Ctx, req: Request): Promise<Response> {
+  if (!ctx.cfg.mediaSelftest) return Response.json({ error: "not_found" }, { status: 404 });
+  if (!ownerAuthorized(ctx, req)) return unauthorized();
+  const url = new URL(req.url);
+  const type = url.searchParams.get("kind") === "image" ? "image" : url.searchParams.get("kind") === "audio" ? "audio" : null;
+  if (!type) return bad();
+  const kind = wantsMedia(ctx, type);
+  if (!kind) return Response.json({ ok: false, error: "feature_off" });
+  const bytes = new Uint8Array(await req.arrayBuffer());
+  if (!bytes.byteLength || bytes.byteLength > 16_000_000) return bad();
+  const caption = kind === "image" ? url.searchParams.get("caption")?.slice(0, 1000) || undefined : undefined;
+  const voice = kind === "audio" && url.searchParams.get("voice") === "1";
+  const mime = (req.headers.get("content-type") ?? "").split(";")[0]!.trim() || undefined;
+  const id = `selftest.${randomHex(8)}`;
+  let job: { kind: typeof kind; voice: boolean; caption?: string; mime?: string; bytes?: Uint8Array; mediaId?: string } = { kind, voice, caption, mime, bytes };
+  if (url.searchParams.get("via") === "graph") {
+    // Exercise the REAL webhook download path: upload the sample to this number's own Meta media store (no message is sent; Meta
+    // keeps uploads for 30 days), then let the job fetch it back by media id with the stored token, exactly as for a customer's file.
+    const pnid = ctx.cfg.phoneNumberIds[0];
+    if (!pnid || !ctx.cfg.waAccessToken) return Response.json({ ok: false, error: "needs_phone_number_id_and_token" });
+    const form = new FormData();
+    form.set("messaging_product", "whatsapp");
+    form.set("type", mime ?? "application/octet-stream");
+    form.set("file", new Blob([bytes as unknown as ArrayBuffer], { type: mime ?? "application/octet-stream" }), kind === "image" ? "sample.jpg" : "sample.ogg");
+    let up: Response;
+    try {
+      up = await ctx.fetch(`https://graph.facebook.com/${ctx.cfg.graphVersion}/${encodeURIComponent(pnid)}/media`, { method: "POST", headers: { Authorization: `Bearer ${ctx.cfg.waAccessToken}` }, body: form });
+    } catch {
+      return Response.json({ ok: false, error: "upload_network" });
+    }
+    const uj = (await up.json().catch(() => ({}))) as { id?: unknown };
+    if (!up.ok || typeof uj.id !== "string") return Response.json({ ok: false, error: `upload_http_${up.status}` });
+    job = { kind, voice, caption, mime, mediaId: uj.id };
+  }
+  const pn = ctx.cfg.phoneNumberIds[0] ?? "selftest";
+  const r = await applyInbound(ctx, { pn, waba: ctx.cfg.wabaId ?? "selftest", wa: SELFTEST_WA }, [
+    { id, type, text: "", ts: ctx.now(), name: "media self-test", media: job },
+  ], { selftest: true });
+  const j = r.jobs[0];
+  if (!j) return Response.json({ ok: false, error: "not_added" });
+  const o = await runMediaJob(ctx, j, { wake: false });
+  ctx.log("admin", { action: "media_selftest", kind, ok: o?.ok === true });
+  return Response.json({ ok: o?.ok === true, conversation_id: r.conv, message_id: id, media_status: o?.media.st ?? null, reason: o?.ok === false ? o.code : null, language: o?.media.lang ?? null });
 }

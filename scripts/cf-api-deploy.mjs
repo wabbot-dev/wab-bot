@@ -293,7 +293,8 @@ else if (cmd === "subdomain") {
 } else if (cmd === "deploy") {
   if (!NAME_RE.test(o.name || "")) die("--name must be lowercase letters, digits and dashes");
   checkSubdomainFlag(o);
-  const bindings = [{ type: "durable_object_namespace", name: "STATE", class_name: "BridgeState" }, { type: "durable_object_namespace", name: "CALLS", class_name: "CallSession" }];
+  // AI = Workers AI (free daily allowance; on the Free plan calls past it fail, never bill): voice-note/image understanding, docs/MEDIA.md
+  const bindings = [{ type: "durable_object_namespace", name: "STATE", class_name: "BridgeState" }, { type: "durable_object_namespace", name: "CALLS", class_name: "CallSession" }, { type: "ai", name: "AI" }];
   if (o["purge-secret-bindings"] !== undefined && o["self-provision"] === undefined) die("--purge-secret-bindings only makes sense with --self-provision");
   if (o["self-provision"] !== undefined) {
     // No secret bindings at all: only the one-time nonce, as a plain-text var.

@@ -3,6 +3,7 @@ import { normalize } from "./conv";
 import { CONTROLS_KEY, controlsOf } from "./controls";
 import { readAll, REJECTIONS_KEY } from "./store";
 import type { Conv, ConvState, Rejections } from "./types";
+import { FREE_NEURONS_PER_DAY, MEDIA_METRICS_KEY, NEURONS_PER_AUDIO_MINUTE, NEURONS_PER_M_TOKENS, utcDay, zeroCounts, type MediaMetrics } from "./media";
 
 /**
  * get_overview: ONE read-only health snapshot for routines and staff. Counts, ages, NAMES and booleans only.
@@ -25,7 +26,7 @@ const iso = (ms: number | undefined) => (ms === undefined ? null : new Date(ms).
 
 export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promise<Json> {
   const now = ctx.now();
-  const { snap, items } = await readAll<Conv>(ctx.store, "conv/", [CONTROLS_KEY, REJECTIONS_KEY]); // 1 read, same cost as the admin overview
+  const { snap, items } = await readAll<Conv>(ctx.store, "conv/", [CONTROLS_KEY, REJECTIONS_KEY, MEDIA_METRICS_KEY]); // 1 read, same cost as the admin overview
   const controls = controlsOf(snap);
   const rej = snap.get<Rejections>(REJECTIONS_KEY);
 
@@ -89,6 +90,7 @@ export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promis
       meta_setup_enabled: cfg.metaSetupEnabled,
     },
     rejections: { count: (rej?.value.count ?? 0) + ctx.state.rejPending, last: iso(rej?.value.last) },
+    media: mediaOverview(ctx, snap.get<MediaMetrics>(MEDIA_METRICS_KEY)?.value ?? null, now),
     secrets: secrets
       ? {
           setup_locked: secrets.setup_locked,
@@ -98,5 +100,34 @@ export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promis
           names: secrets.names,
         }
       : null,
+  };
+}
+
+/** Voice note / image understanding: switches, caps, models and counters (no content). See docs/MEDIA.md. */
+function mediaOverview(ctx: Ctx, m: MediaMetrics | null, now: number): Json {
+  const cfg = ctx.cfg;
+  const today = m && m.day === utcDay(now) ? { ...zeroCounts(), ...m.today } : zeroCounts();
+  const total = m ? { ...zeroCounts(), ...m.total } : zeroCounts();
+  const stt = NEURONS_PER_AUDIO_MINUTE[cfg.mediaSttModel];
+  const vis = NEURONS_PER_M_TOKENS[cfg.mediaVisionModel];
+  const est = stt !== undefined && vis !== undefined
+    ? Math.round((today.audio_seconds / 60) * stt + (today.vision_input_tokens * vis.in + today.vision_output_tokens * vis.out) / 1e6)
+    : null;
+  return {
+    transcribe_enabled: cfg.mediaTranscribe,
+    describe_enabled: cfg.mediaDescribe,
+    ai_binding_present: !!ctx.ai,
+    stt_model: cfg.mediaSttModel,
+    vision_model: cfg.mediaVisionModel,
+    max_audio_seconds: cfg.mediaMaxAudioSeconds,
+    max_audio_bytes: cfg.mediaMaxAudioBytes,
+    max_image_bytes: cfg.mediaMaxImageBytes,
+    day_utc: utcDay(now),
+    today,
+    total,
+    estimated_neurons_today: est,
+    free_neurons_per_day: FREE_NEURONS_PER_DAY,
+    last_failure_at: iso(m?.last_failure_at),
+    last_failure_code: m?.last_failure_code ?? null,
   };
 }

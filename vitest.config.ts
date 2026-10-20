@@ -7,6 +7,7 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: "./wrangler.toml" },
+      remoteBindings: false, // the [ai] binding stays local (never a Cloudflare login or network); tests stub env.AI themselves
       miniflare: {
         bindings: {
           LAUNCH_MODE: "live",

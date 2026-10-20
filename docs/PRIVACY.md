@@ -13,7 +13,7 @@ All state lives in one SQLite-backed Durable Object in your own Cloudflare accou
 | Rejected-webhook counter | No |
 | Self-provisioned secrets and the setup lock, if you used `POST /api/setup` ([SELF-PROVISIONING.md](SELF-PROVISIONING.md)) | Credentials, not customer data. Kept in their own tables, apart from conversations |
 
-Not stored: media files (images, audio, video and documents arrive as type and caption only) and message bodies in logs. The WhatsApp access token lives in your Worker secrets (or, if self-provisioned, in the Durable Object's secret table) and is never given to the agent.
+Not stored: media files (raw audio, images, video and documents are never stored) and message bodies in logs. Voice notes and images are, by default, turned into text with Workers AI in your own Cloudflare account and that text (a transcript, or a description plus the caption) is stored on the message like typed text, and erased with the conversation; switch it off with `MEDIA_TRANSCRIBE=0` / `MEDIA_DESCRIBE=0` ([MEDIA.md](MEDIA.md#safety-and-privacy)). Video and documents arrive as type and caption only. The WhatsApp access token lives in your Worker secrets (or, if self-provisioned, in the Durable Object's secret table) and is never given to the agent.
 
 Logs carry ids and counters only: no message text, names, phone numbers or tokens. `tests/extras.test.ts` includes a log-hygiene test. Workers Logs are enabled in `wrangler.toml` (ids and counters only); remove the `[observability]` block if you prefer no logs.
 
