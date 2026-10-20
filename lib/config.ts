@@ -54,6 +54,14 @@ export interface Config {
    *  and show "typing..." (Meta dismisses it when the reply arrives or after 25 s) */
   readReceipts: boolean;
   typingIndicator: boolean;
+  /** instant owner/staff alerts (lib/alerts.ts, docs/ALERTS.md): webhook and/or WhatsApp to the owner's own numbers */
+  alertWebhookUrl?: string;
+  alertWebhookKey?: string;
+  alertWhatsappTo: string[];
+  alertTemplate?: string;
+  alertTemplateLanguage: string;
+  alertEvents: string[];
+  alertAdminUrl?: string;
   maxMessages: number;
   staleWakeMs: number;
   mcpToken?: string;
@@ -222,6 +230,13 @@ export function loadConfig(env: Env): Config {
     sendRetryBaseMs: intIn(env.SEND_RETRY_BASE_MS, 1000, 0, 10000),
     readReceipts: !/^(0|false|no|off)$/i.test(env.READ_RECEIPTS?.trim() ?? ""),
     typingIndicator: !/^(0|false|no|off)$/i.test(env.TYPING_INDICATOR?.trim() ?? ""),
+    alertWebhookUrl: /^https:\/\/[^\s]{4,500}$/.test(env.ALERT_WEBHOOK_URL?.trim() ?? "") ? env.ALERT_WEBHOOK_URL!.trim() : undefined,
+    alertWebhookKey: env.ALERT_WEBHOOK_KEY?.trim() || undefined,
+    alertWhatsappTo: list(env.ALERT_WHATSAPP_TO).map(normDigits).filter((x) => /^\d{7,15}$/.test(x)),
+    alertTemplate: /^[a-z0-9_]{1,512}$/.test(env.ALERT_TEMPLATE?.trim() ?? "") ? env.ALERT_TEMPLATE!.trim() : undefined,
+    alertTemplateLanguage: /^[a-z]{2}(_[A-Z]{2})?$/.test(env.ALERT_TEMPLATE_LANGUAGE?.trim() ?? "") ? env.ALERT_TEMPLATE_LANGUAGE!.trim() : "en",
+    alertEvents: env.ALERT_EVENTS?.trim() ? list(env.ALERT_EVENTS).map((x) => x.toLowerCase()) : ["escalation", "payment_claimed", "booking_failed", "test"],
+    alertAdminUrl: /^https:\/\/[^\s]{4,300}$/.test(env.ALERT_ADMIN_URL?.trim() ?? "") ? env.ALERT_ADMIN_URL!.trim() : undefined,
     maxMessages: intIn(env.MAX_MESSAGES, 50, 20, 200),
     staleWakeMs: intIn(env.STALE_WAKE_MS, 300000, 60000, 86400000),
     mcpToken: env.MCP_TOKEN || undefined,

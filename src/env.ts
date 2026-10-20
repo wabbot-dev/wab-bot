@@ -31,6 +31,13 @@ export interface Env {
   SEND_RETRIES?: string;
   SEND_RETRY_BASE_MS?: string;
   READ_RECEIPTS?: string;
+  ALERT_WEBHOOK_URL?: string;
+  ALERT_WEBHOOK_KEY?: string;
+  ALERT_WHATSAPP_TO?: string;
+  ALERT_TEMPLATE?: string;
+  ALERT_TEMPLATE_LANGUAGE?: string;
+  ALERT_EVENTS?: string;
+  ALERT_ADMIN_URL?: string;
   TYPING_INDICATOR?: string;
   MEDIA_MAX_DOC_BYTES?: string;
   MEDIA_MAX_DOC_CHARS?: string;

@@ -494,7 +494,7 @@ function transcriptOut(t: CallTranscript, l: CallLog, reveal: boolean) {
 export function scrub(ctx: Ctx, value: unknown): unknown {
   const red = new Redactor();
   const c = ctx.cfg;
-  for (const s of [c.waAccessToken, c.waAppSecret, c.waVerifyToken, c.mcpToken, c.adminToken, c.cronSecret, c.wakeKey, c.xaiApiKey, c.elevenlabsApiKey, c.adminMcpToken]) red.add(s);
+  for (const s of [c.waAccessToken, c.waAppSecret, c.waVerifyToken, c.mcpToken, c.adminToken, c.cronSecret, c.wakeKey, c.xaiApiKey, c.elevenlabsApiKey, c.adminMcpToken, c.alertWebhookKey]) red.add(s);
   const text = red.redact(JSON.stringify(value));
   return JSON.parse(text);
 }

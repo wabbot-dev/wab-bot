@@ -89,7 +89,7 @@ export interface Conv {
   /** outbound records by reply key (capped) */
   outs: Record<string, OutRec>;
   wake: WakeState;
-  escalation?: { reason: string; at: number };
+  escalation?: { reason: string; at: number; category?: string };
   hold?: { reason: string; at: number; replyKey?: string };
   /** set by an inbound STOP (or a staff action); START clears it. Every bot-started send is refused while set. */
   optOut?: { at: number; via: "customer" | "staff" };

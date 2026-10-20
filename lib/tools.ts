@@ -10,6 +10,7 @@ import { normDigits } from "./config";
 import { readAll, update, updateMulti } from "./store";
 import type { Conv, HourCounter, OutRec } from "./types";
 import { armedOf, runWake, settleWakeOnClaim } from "./wake";
+import { alertsConfigured, ESCALATION_CATEGORIES, scheduleAlert } from "./alerts";
 import { chooseVoice, prepareVoice, recordVoice, voiceReplyHint, type ReplyAs, type TtsProvider } from "./voice-reply";
 
 type Json = Record<string, unknown>;
@@ -685,14 +686,20 @@ export async function releaseConversation(ctx: Ctx, id: string, lease: string): 
   });
 }
 
-export async function escalateConversation(ctx: Ctx, id: string, lease: string, reason: string): Promise<Json> {
-  return withLease(ctx, id, lease, (c, now) => {
+export async function escalateConversation(ctx: Ctx, id: string, lease: string, reason: string, category?: string): Promise<Json> {
+  const cat = category && (ESCALATION_CATEGORIES as readonly string[]).includes(category) ? category : "other";
+  let wa: string | undefined;
+  const r = await withLease(ctx, id, lease, (c, now) => {
     c.state = "escalated";
-    c.escalation = { reason: reason.slice(0, 500), at: now };
+    c.escalation = { reason: reason.slice(0, 500), at: now, category: cat };
     c.lease = undefined;
     c.leaseExpiry = undefined;
-    return { next: c, result: { ok: true, state: "escalated" } };
+    wa = c.wa_id;
+    return { next: c, result: { ok: true, state: "escalated", category: cat, owner_alerted: alertsConfigured(ctx) } };
   });
+  // instant owner/staff alert (docs/ALERTS.md): after the state is stored, never before
+  if (r.ok === true) scheduleAlert(ctx, { event: "escalation", conversationId: id, category: cat, reason, waId: wa });
+  return r;
 }
 
 // ---------------------------------------------------------------- get_controls

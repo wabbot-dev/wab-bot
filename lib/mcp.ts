@@ -158,9 +158,11 @@ const TOOLS: Tool[] = [
   },
   {
     name: "escalate_conversation",
-    description: "Hand the conversation to a human with a reason (max 500 chars).",
-    inputSchema: obj({ conversation_id: convSchema, lease: leaseSchema, reason: { type: "string", minLength: 1, maxLength: 500 } }, ["conversation_id", "lease", "reason"]),
-    run: (ctx, a) => escalateConversation(ctx, conv(a)!, lease(a), str(a, "reason", { min: 1, max: 500, required: true })!),
+    description: "Hand the conversation to a human with a short reason (max 500 chars; no card numbers or passwords). The owner/staff are alerted at once when alerts are configured (owner_alerted in the result). " +
+      "category: human_requested, complaint, payment, order, booking, account, identity, urgent or other (default).",
+    inputSchema: obj({ conversation_id: convSchema, lease: leaseSchema, reason: { type: "string", minLength: 1, maxLength: 500 },
+      category: { type: "string", enum: ["human_requested", "complaint", "payment", "order", "booking", "account", "identity", "urgent", "other"] } }, ["conversation_id", "lease", "reason"]),
+    run: (ctx, a) => escalateConversation(ctx, conv(a)!, lease(a), str(a, "reason", { min: 1, max: 500, required: true })!, str(a, "category", { min: 1, max: 40 })),
   },
   {
     name: "get_controls",

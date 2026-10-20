@@ -5,6 +5,7 @@ import { readAll, REJECTIONS_KEY } from "./store";
 import type { Conv, ConvState, Rejections } from "./types";
 import { FREE_NEURONS_PER_DAY, MEDIA_METRICS_KEY, NEURONS_PER_AUDIO_MINUTE, NEURONS_PER_M_TOKENS, NEURONS_PER_TTS_1K_CHARS, NEURONS_PER_TTS_MINUTE, utcDay, zeroCounts, type MediaMetrics } from "./media";
 import { voiceLanguagesOf } from "./voice-reply";
+import { ALERTS_KEY, type AlertRecord } from "./alerts";
 
 /**
  * get_overview: ONE read-only health snapshot for routines and staff. Counts, ages, NAMES and booleans only.
@@ -27,7 +28,7 @@ const iso = (ms: number | undefined) => (ms === undefined ? null : new Date(ms).
 
 export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promise<Json> {
   const now = ctx.now();
-  const { snap, items } = await readAll<Conv>(ctx.store, "conv/", [CONTROLS_KEY, REJECTIONS_KEY, MEDIA_METRICS_KEY]); // 1 read, same cost as the admin overview
+  const { snap, items } = await readAll<Conv>(ctx.store, "conv/", [CONTROLS_KEY, REJECTIONS_KEY, MEDIA_METRICS_KEY, ALERTS_KEY]); // 1 read, same cost as the admin overview
   const controls = controlsOf(snap);
   const rej = snap.get<Rejections>(REJECTIONS_KEY);
 
@@ -92,6 +93,14 @@ export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promis
       meta_setup_enabled: cfg.metaSetupEnabled,
     },
     rejections: { count: (rej?.value.count ?? 0) + ctx.state.rejPending, last: iso(rej?.value.last) },
+    alerts: (() => {
+      const a = snap.get<AlertRecord>(ALERTS_KEY)?.value;
+      return {
+        webhook_configured: !!cfg.alertWebhookUrl, whatsapp_recipients_count: cfg.alertWhatsappTo.length, template_set: !!cfg.alertTemplate, events: cfg.alertEvents,
+        sent_count: a?.count ?? 0, last_at: iso(a?.at), last_event: a?.event ?? null, last_webhook_status: a?.webhook?.status ?? null,
+        last_whatsapp: a?.whatsapp ? { sent: a.whatsapp.sent, failed: a.whatsapp.failed, codes: a.whatsapp.codes } : null,
+      };
+    })(),
     media: mediaOverview(ctx, snap.get<MediaMetrics>(MEDIA_METRICS_KEY)?.value ?? null, now),
     secrets: secrets
       ? {

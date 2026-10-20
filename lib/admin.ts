@@ -1,3 +1,4 @@
+import { alertsConfigured, sendAlert } from "./alerts";
 import { bearerOf, tokenOk } from "./crypto";
 import type { Ctx } from "./ctx";
 import { CONV_ID_RE, armWake, convKeyOf, normalize, windowOpen } from "./conv";
@@ -180,6 +181,13 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
     ctx.log("admin", { action, value: body.value });
     const kicked = body.value === "active" ? await kickPendingWakes(ctx) : 0;
     return Response.json({ ok: true, auto_reply: body.value, woken: kicked });
+  }
+  if (action === "test_alert") {
+    // owner only: one test alert to every configured channel (docs/ALERTS.md); no conversation, no customer
+    if (!ownerAuthorized(ctx, req)) return unauthorized();
+    if (!alertsConfigured(ctx)) return Response.json({ ok: false, error: "alerts_not_configured" });
+    const rec = await sendAlert(ctx, { event: "test", reason: "test alert from the admin page" });
+    return Response.json({ ok: !!rec, webhook: rec?.webhook ?? null, whatsapp: rec?.whatsapp ?? null });
   }
   if (action === "staff_invite") {
     if (!ownerAuthorized(ctx, req)) return unauthorized(); // a staff session can never mint more sessions

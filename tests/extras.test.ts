@@ -87,7 +87,7 @@ test("admin API: auth, overview, actions and their error strings", async () => {
   // escalate via lease, then reopen (no auto wake), wake, resolve
   const lease = await claimAndRead(h);
   const { escalateConversation } = await import("../lib/tools");
-  assert.deepEqual(await escalateConversation(h.ctx, id, lease, "red flag"), { ok: true, state: "escalated" });
+  assert.deepEqual(await escalateConversation(h.ctx, id, lease, "red flag"), { ok: true, state: "escalated", category: "other", owner_alerted: false });
   const ov: any = await (await adminGet(h.ctx, adminReq("GET"))).json();
   assert.equal(ov.conversations[0].state, "escalated");
   assert.equal(ov.conversations[0].escalation_reason, "red flag");
