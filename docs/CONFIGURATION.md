@@ -65,8 +65,12 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 | `MEDIA_STT_MODEL`, `MEDIA_VISION_MODEL` | Workers AI model names (default `@cf/openai/whisper-large-v3-turbo`, `@cf/meta/llama-4-scout-17b-16e-instruct`) |
 | `MEDIA_SELFTEST` | `1` mounts the owner-only `POST /api/admin/media-selftest` and `POST /api/admin/voice-selftest` (default off: 404) |
 | `VOICE_REPLIES` | Optional voice-note replies ([VOICE-REPLIES.md](VOICE-REPLIES.md)): `off` (default), `mirror` (recommended: speak only when the customer's latest message was a voice note) or `on` (also on `reply_as: "voice"`) |
-| `VOICE_TTS_MODEL` | Workers AI text-to-speech model (default `@cf/myshell-ai/melotts`: English, French, Spanish, Chinese, Japanese, Korean; no Arabic) |
+| `VOICE_TTS_MODEL` | Workers AI text-to-speech model (default `@cf/myshell-ai/melotts`: English, French, Spanish, Chinese, Japanese, Korean; no Arabic, see `VOICE_REPLY_PROVIDER`) |
 | `VOICE_MAX_CHARS`, `VOICE_MAX_SECONDS`, `VOICE_TIMEOUT_MS` | Caps (default 400 characters, 45 s of audio) and the text-to-speech timeout (default 15000 ms); over a cap the text is sent |
+| `VOICE_REPLY_PROVIDER` | `workers-ai` (default) or `elevenlabs`: Arabic, and languages the Workers AI model lacks, are spoken by your ElevenLabs voice ([VOICE-REPLIES.md](VOICE-REPLIES.md#elevenlabs-provider)) |
+| `ELEVENLABS_API_KEY` | Secret (stdin only). ElevenLabs key scoped to Text to Speech plus Voices read; sent only to `api.elevenlabs.io` |
+| `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID`, `ELEVENLABS_MAX_CHARS` | The voice; the model (default `eleven_v4`); the cap (default 600 characters, longer replies go as text) |
+| `ARABIC_REPLY_DIALECT` | `lebanese` (default) or `none`: the wording hint `get_history` gives the agent for spoken Arabic replies ([VOICE-REPLIES.md](VOICE-REPLIES.md#arabic-wording-lebanese-dialect)) |
 
 ### Admin MCP and voice calling (bindings and vars; none of the gate settings can be set through any route or tool)
 

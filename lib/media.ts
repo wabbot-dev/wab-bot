@@ -79,6 +79,12 @@ export interface MediaCounts {
   voice_send_rejected: number;
   voice_seconds: number;
   voice_chars: number;
+  /** of voice_sent: spoken by ElevenLabs (VOICE_REPLY_PROVIDER=elevenlabs); its seconds and characters (ElevenLabs bills per character) */
+  voice_el_sent: number;
+  voice_el_seconds: number;
+  voice_el_chars: number;
+  /** of voice_tts_failed: ElevenLabs answered with a quota, credit or rate limit (voice_tts_el_quota / _rate_limited) */
+  voice_el_quota: number;
 }
 export interface MediaMetrics {
   /** UTC day of `today` (the Workers AI allowance resets at 00:00 UTC) */
@@ -94,7 +100,7 @@ export const zeroCounts = (): MediaCounts => ({
   transcribed: 0, described: 0, too_large: 0, download_failed: 0, ai_failed: 0, ai_quota_exhausted: 0, ai_paid_only: 0, unavailable: 0,
   audio_seconds: 0, vision_input_tokens: 0, vision_output_tokens: 0,
   voice_sent: 0, voice_fallback: 0, voice_tts_failed: 0, voice_encode_failed: 0, voice_upload_failed: 0, voice_language_unsupported: 0,
-  voice_send_rejected: 0, voice_seconds: 0, voice_chars: 0,
+  voice_send_rejected: 0, voice_seconds: 0, voice_chars: 0, voice_el_sent: 0, voice_el_seconds: 0, voice_el_chars: 0, voice_el_quota: 0,
 });
 export const utcDay = (ms: number) => new Date(ms).toISOString().slice(0, 10);
 

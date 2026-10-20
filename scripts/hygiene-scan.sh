@@ -23,6 +23,7 @@ check "AWS access key id"            'AKIA[0-9A-Z]{16}'
 check "GitHub token"                 '(ghp|gho|ghu|ghs|ghr|github_pat)_[A-Za-z0-9_]{20,}'
 check "Slack token"                  'xox[abprs]-[A-Za-z0-9-]{10,}'
 check "OpenAI/xAI/Stripe style key"  '\b(sk|rk|pk)-[A-Za-z0-9_-]{20,}|\bxai-[A-Za-z0-9]{20,}'
+check "sk_ style API key"            '\bsk_[A-Za-z0-9]{24,}'
 check "webhook signing secret"       'whsec_[A-Za-z0-9+/=]{8,}'
 check "Meta access token"            '\bEAA[A-Za-z0-9]{40,}'
 check "Cloudflare API token value"   'CLOUDFLARE_API_TOKEN["'\'']?[:=] *["'\'']?[A-Za-z0-9_-]{30,}'
@@ -74,9 +75,10 @@ fi
 check "account or zone id (32 hex)" '\b[0-9a-f]{32}\b' '0123456789abcdef0123456789abcdef'
 # The Vercel/Next.js version was replaced; no stale host references may remain.
 check "stale host reference"         'vercel|next\.js|nextjs|@vercel/|blob store|\.vercel\.app' '' '-niIE'
-# The voice architecture is Grok Voice (xAI) only for now; no other voice provider may be mentioned.
-# Allowed: the Workers AI speech-to-text model id (@cf/openai/whisper-...), which runs in the owner's own Cloudflare account, not an outside provider.
-check "out-of-scope voice provider"  'openai|gpt-realtime|gpt-live|elevenlabs|eleven labs' '@cf/openai/whisper' '-niIE'
+# Voice calls are Grok Voice (xAI) only; voice-note replies are Workers AI or, by the owner's choice, ElevenLabs (docs/VOICE-REPLIES.md).
+# No other voice provider may be mentioned. Allowed: the Workers AI speech-to-text model id (@cf/openai/whisper-...), which runs in the
+# owner's own Cloudflare account, not an outside provider.
+check "out-of-scope voice provider"  'openai|gpt-realtime|gpt-live' '@cf/openai/whisper' '-niIE'
 check "internal tooling name"        '/workspace|\bbus/|rea-src|spike-a|spike-b|mailbox alias' '' '-niIE'
 [ $fail -eq 0 ] && echo "hygiene: clean ($(echo "$files" | wc -l) tracked files scanned)"
 exit $fail

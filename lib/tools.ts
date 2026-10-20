@@ -10,7 +10,7 @@ import { normDigits } from "./config";
 import { readAll, update, updateMulti } from "./store";
 import type { Conv, HourCounter, OutRec } from "./types";
 import { armedOf, runWake, settleWakeOnClaim } from "./wake";
-import { chooseVoice, prepareVoice, recordVoice, type ReplyAs } from "./voice-reply";
+import { chooseVoice, prepareVoice, recordVoice, voiceReplyHint, type ReplyAs } from "./voice-reply";
 
 type Json = Record<string, unknown>;
 
@@ -101,6 +101,8 @@ export async function getHistory(ctx: Ctx, id: string, lease: string, limit = 20
         ...(m.media ? { media: { status: m.media.st, language: m.media.lang ?? null } } : {}),
       })),
     };
+    const vh = voiceReplyHint(ctx.cfg, c);
+    if (vh) view.voice_reply = vh as Json;
     if (c.inSeq <= seenUpTo(c)) return { next: undefined, result: view };
     c.seenSeq = c.inSeq;
     c.updatedAt = now;
@@ -351,14 +353,14 @@ export async function sendReply(ctx: Ctx, a: SendArgs): Promise<Json> {
   // 11b optional voice note (VOICE_REPLIES): speech, encoding and the Meta upload happen BEFORE the reserve commit, so a slow
   // model never leaves a 'sending' record behind; any failure here simply sends the text (nothing is retried).
   let voiceFallback: string | undefined;
-  let voiceInfo: { seconds: number } | undefined;
+  let voiceInfo: { seconds: number; provider: "workers-ai" | "elevenlabs" } | undefined;
   if (!content.isTemplate) {
     const choice = chooseVoice(cfg, c0, a.reply_as);
     if (choice.voice) {
       const p = await prepareVoice(ctx, c0, content.text, a.voice_language);
       if (p.ok) {
         content.voiceMediaId = p.mediaId;
-        voiceInfo = { seconds: p.seconds };
+        voiceInfo = { seconds: p.seconds, provider: p.provider };
       } else {
         voiceFallback = p.code;
         ctx.log("voice", { conv: id, ok: false, code: p.code });
@@ -394,7 +396,12 @@ export async function sendReply(ctx: Ctx, a: SendArgs): Promise<Json> {
   const res = await deliver(ctx, { id, replyKey, to: String(reserve.result.wa_id), pn: String(reserve.result.phone_number_id), content, origin: "reply" });
   if (content.isTemplate) return res;
   if (content.voiceMediaId) {
-    if (res.ok === true) await recordVoice(ctx, { voice_sent: 1, voice_seconds: Math.round(voiceInfo?.seconds ?? 0), voice_chars: content.text.length });
+    if (res.ok === true) {
+      const secs = Math.round(voiceInfo?.seconds ?? 0);
+      const el = voiceInfo?.provider === "elevenlabs" ? { voice_el_sent: 1, voice_el_seconds: secs, voice_el_chars: content.text.length } : {};
+      await recordVoice(ctx, { voice_sent: 1, voice_seconds: secs, voice_chars: content.text.length, ...el });
+      ctx.log("voice", { conv: id, ok: true, provider: voiceInfo?.provider ?? "workers-ai", seconds: secs, chars: content.text.length });
+    }
     else if (typeof res.error === "string" && res.error.startsWith("send_rejected_http_")) {
       await recordVoice(ctx, { voice_send_rejected: 1 }, "voice_send_rejected");
       return { ...res, sent_as: "voice", hint: "Meta refused the voice note; nothing was sent. Send the same text again with reply_as \"text\" and a new idempotency_key." };

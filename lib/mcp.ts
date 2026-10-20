@@ -74,7 +74,9 @@ const TOOLS: Tool[] = [
     description:
       "Send a reply to the customer of this conversation (recipient is fixed by the server; there is no 'to'). Provide text OR template_name. All safety guards are enforced server-side. " +
       "Voice notes (only if the owner turned VOICE_REPLIES on): reply_as \"auto\" (default) speaks the text when the customer's latest message was a voice note, \"voice\" asks for it (mode `on` only), \"text\" never speaks. " +
-      "The text is always stored; if speaking fails or the language has no voice (Arabic, for example) the text is sent instead and the result says sent_as \"text\" with voice_fallback.",
+      "The text is always stored; if speaking fails, the text is too long, or the language has no voice (Arabic without VOICE_REPLY_PROVIDER=elevenlabs, for example) the text is sent instead and the result says sent_as \"text\" with voice_fallback. " +
+      "When get_history returns voice_reply.expected true, your text will be SPOKEN: keep it short (under voice_reply.max_chars), no links, lists or emojis, and if it is Arabic follow voice_reply.arabic_style " +
+      "(by default Beiruti Lebanese dialect in Arabic script, for example هلّق، شو، كيفك، منيح، بدّك، عنّا، مش (never مو)، كرميلك (never كرمالك or منشان)، بزبّطلك، تكرم عينك، يسلملي قلبك، لكان; not formal or Syrian Arabic).",
     inputSchema: obj(
       {
         conversation_id: convSchema,
@@ -85,7 +87,7 @@ const TOOLS: Tool[] = [
         template_params: { type: "array", maxItems: 20, items: { type: "string", maxLength: 1000 } },
         idempotency_key: { type: "string", maxLength: 100 },
         reply_as: { type: "string", enum: ["auto", "text", "voice"], description: "auto (default), text, or voice; see the tool description" },
-        voice_language: { type: "string", pattern: "^[a-z]{2}$", description: "language of the text for the voice, e.g. en, fr, es (optional; detected from the customer's voice note otherwise)" },
+        voice_language: { type: "string", pattern: "^[a-z]{2}$", description: "language of the text for the voice, e.g. en, fr, es, ar (optional; Arabic script is detected by itself; otherwise the customer's voice-note language)" },
       },
       ["conversation_id", "lease"],
     ),

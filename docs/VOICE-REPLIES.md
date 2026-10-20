@@ -39,14 +39,71 @@ Nothing is retried. Audio is never written to storage or logs; only short codes 
 | `@cf/deepgram/aura-1` | English | 1,363.64 per 1,000 characters | Can return Ogg Opus directly (no encoding) |
 | `@cf/deepgram/aura-2-en` / `aura-2-es` | English / Spanish | 2,727.27 per 1,000 characters | Same |
 
-**Arabic is not supported:** no Workers AI text-to-speech model speaks Arabic today, so Arabic replies always go as text
-(`voice_fallback: "voice_language_unsupported_ar"`). The same holds for any language a model lacks. Sources:
+**Arabic needs the ElevenLabs provider:** no Workers AI text-to-speech model speaks Arabic today, so with the default provider Arabic
+replies go as text (`voice_fallback: "voice_language_unsupported_ar"`). Set `VOICE_REPLY_PROVIDER=elevenlabs` to speak them with your own
+ElevenLabs voice ([below](#elevenlabs-provider)). The same holds for any language a model lacks. Sources:
 [melotts](https://developers.cloudflare.com/workers-ai/models/melotts/), [aura-2-en](https://developers.cloudflare.com/workers-ai/models/aura-2-en/),
 [pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
 **Cost.** With MeloTTS a 10-second reply is about 3 Neurons. The free 10,000 Neurons per day (reset 00:00 UTC) are shared with
 transcription and image descriptions; on the Workers Free plan, use past the allowance fails (error 3036) and the text is sent instead. It
 is never billed. On Workers Paid, use past the allowance is billed at $0.011 per 1,000 Neurons.
+
+## ElevenLabs provider
+
+Optional, for Arabic (and any language the Workers AI model lacks). Off unless the owner sets `VOICE_REPLY_PROVIDER=elevenlabs`;
+voice replies themselves still need `VOICE_REPLIES` (`mirror` recommended).
+
+| Language of the reply | Spoken by |
+| --- | --- |
+| Arabic (`ar`, from the Arabic script) | ElevenLabs |
+| A language the Workers AI model speaks (MeloTTS: `en`, `fr`, `es`, `zh`, `ja`, `ko`) | Workers AI, exactly as before |
+| Any other two-letter language (for example `de`, `it`, `tr`) | ElevenLabs (the `eleven_*` models are multilingual) |
+
+- **One request per reply:** `POST https://api.elevenlabs.io/v1/text-to-speech/<ELEVENLABS_VOICE_ID>?output_format=opus_48000_64` with
+  `{"text": ..., "model_id": ELEVENLABS_MODEL_ID}` and the key in the `xi-api-key` header. The answer is already a mono Ogg Opus file
+  (48 kHz, 64 kbit/s), which WhatsApp shows as a voice note, so it is uploaded as `audio/ogg` and sent as `type: "audio"` with `voice: true`
+  through the same upload and send code as Workers AI replies. Nothing is decoded or re-encoded, so no Durable Object is involved.
+- **Model:** `eleven_v4` (default) was accepted by the public API on 2026-10-20; `eleven_v3` also works.
+- **Caps:** a reply longer than `ELEVENLABS_MAX_CHARS` (default 600) or `VOICE_MAX_CHARS` goes as text without any ElevenLabs call;
+  audio over `VOICE_MAX_SECONDS` or 500 KB goes as text.
+- **Errors and quota:** any ElevenLabs error sends the text instead, once, with no retry. Codes: `voice_tts_el_quota` (quota or credits
+  used up), `voice_tts_el_rate_limited` (429 or too many concurrent requests), `voice_tts_el_auth` / `voice_tts_el_permission` (key),
+  `voice_tts_el_voice_not_found`, `voice_tts_el_model`, `voice_tts_el_http_xxx`, `voice_tts_el_timeout`, `voice_tts_el_network`,
+  `voice_tts_el_not_ogg_opus`, `voice_tts_el_key_missing`, `voice_tts_el_voice_missing`. Only ElevenLabs' short `detail.status` word is
+  read from an error; its message is never echoed or logged.
+- **Key:** `ELEVENLABS_API_KEY` is a Worker secret (stdin only:
+  `wrangler secret put ELEVENLABS_API_KEY < key-file`) or self-provisioned. Give it the smallest scope: Text to Speech, plus Voices read.
+  It goes only to `api.elevenlabs.io`, is never logged, returned or stored by the bridge, and is scrubbed from MCP results.
+- **Cost:** ElevenLabs bills your own ElevenLabs account per character; no Workers AI Neurons are used for these replies.
+  `get_overview` → `media` shows `voice_reply_provider`, an `elevenlabs` block (`key_present`, `voice_id_set`, `model_id`,
+  `max_chars`; never the key) and the counters `voice_el_sent`, `voice_el_seconds`, `voice_el_chars` and `voice_el_quota`.
+- **Privacy:** the reply text (not the customer's message) is sent to ElevenLabs to be spoken. Check its data policy before you turn this on.
+
+## Arabic wording (Lebanese dialect)
+
+A voice reads exactly what the agent wrote, so formal Arabic or another dialect's words come out sounding foreign. While voice replies are
+on, `get_history` returns a `voice_reply` block: `expected` (true when the reply will be spoken), `provider`, `max_chars` and, with
+`ARABIC_REPLY_DIALECT=lebanese` (the default), `arabic_style`, the instruction to write a spoken Arabic reply in **Beiruti Lebanese dialect,
+in Arabic script**, not formal (فصحى) and not Syrian, Egyptian or Gulf forms. The `send_reply` tool description says the same. It asks for:
+
+| Use | Meaning | Never |
+| --- | --- | --- |
+| هلّق | now | |
+| شو | what | |
+| كيفك | how are you | |
+| منيح | good | |
+| بدّك | you want | |
+| عنّا | we have | |
+| مش | not | مو |
+| كرميلك (said *kirmelak*) | for your sake | كرمالك, منشان |
+| بزبّطلك | I'll sort it for you | |
+| تكرم عينك | with pleasure | |
+| يسلملي قلبك | thank you (warm) | |
+| لكان | then / of course | |
+
+and a short, natural reply with no lists, links, emojis or markdown. `ARABIC_REPLY_DIALECT=none` turns the hint off. Typed replies are not
+affected. The hint is advice to the agent; the bridge does not rewrite the text.
 
 ## The encoder and the CPU budget
 
@@ -69,6 +126,12 @@ is never billed. On Workers Paid, use past the allowance is billed at $0.011 per
 | `VOICE_MAX_CHARS` | 400 (20 to 1500) | Longer replies go as text |
 | `VOICE_MAX_SECONDS` | 45 (5 to 120) | Longer audio goes as text; WhatsApp shows the play button only up to 512 KB |
 | `VOICE_TIMEOUT_MS` | 15000 (2000 to 20000) | Text-to-speech timeout |
+| `VOICE_REPLY_PROVIDER` | `workers-ai` | `elevenlabs`: Arabic and languages Workers AI lacks are spoken by ElevenLabs ([above](#elevenlabs-provider)) |
+| `ELEVENLABS_API_KEY` | (secret, unset) | ElevenLabs key (Text to Speech, plus Voices read); stdin only |
+| `ELEVENLABS_VOICE_ID` | (unset) | The ElevenLabs voice to speak with |
+| `ELEVENLABS_MODEL_ID` | `eleven_v4` | ElevenLabs model (`eleven_v3` also works) |
+| `ELEVENLABS_MAX_CHARS` | 600 (20 to 1500) | Longer replies go as text, with no ElevenLabs call |
+| `ARABIC_REPLY_DIALECT` | `lebanese` | Wording hint for spoken Arabic replies ([above](#arabic-wording-lebanese-dialect)); `none` turns it off |
 
 `send_reply` takes two optional fields: `reply_as` (`auto` by default, `text` or `voice`) and `voice_language` (two letters, for
 example `en`).
@@ -82,7 +145,8 @@ The send result carries `sent_as` (`voice` or `text`) and, when a wanted voice n
 
 | Code | Meaning | What happens |
 | --- | --- | --- |
-| `voice_language_unsupported_xx` | No voice for that language (Arabic: `_ar`) | Text sent |
+| `voice_language_unsupported_xx` | No voice for that language (Arabic without the ElevenLabs provider: `_ar`) | Text sent |
+| `voice_tts_el_*` | ElevenLabs error, quota (`_quota`) or rate limit (`_rate_limited`) ([list](#elevenlabs-provider)) | Text sent |
 | `voice_language_unknown` | Latin text, no `voice_language`, and no detected language | Text sent; pass `voice_language` |
 | `voice_too_long` | Over `VOICE_MAX_CHARS`, `VOICE_MAX_SECONDS` or 500 KB | Text sent |
 | `voice_tts_ai_3036` | Daily free allowance used up | Text sent until 00:00 UTC |
@@ -122,5 +186,8 @@ self-test conversation that is erased afterwards. Remove `MEDIA_SELFTEST` when d
   (each 0.7 to 2 s end to end); each file transcribed back by Whisper in the same language. Uploads accepted by Meta (`audio/ogg`, sizes
   matching). CPU measured with `wrangler tail` (figures above). One voice reply sent through the full `send_reply` path to the allowlisted
   test phone. Meta accepted it and returned a message id.
+- **ElevenLabs provider**: tested locally in `tests/elevenlabs.test.ts` (provider choice, the request, error and quota codes, the text
+  fallback, caps, counters, the wording hint, the key never in logs or results). Run on a test Worker on 2026-10-20 (see
+  [STATUS.md](STATUS.md)).
 - **Not yet verified**: the bubble on the phone (whether it plays as a voice note) and the delivery status. The test Worker cannot receive
   Meta's signed status webhooks until its app secret is set.

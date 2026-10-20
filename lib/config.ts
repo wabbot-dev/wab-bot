@@ -4,6 +4,13 @@ export const DEFAULT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 /** Workers AI text-to-speech default for optional voice-note replies (docs/VOICE-REPLIES.md). */
 export const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
 export type VoiceRepliesMode = "off" | "mirror" | "on";
+/** VOICE_REPLY_PROVIDER: who speaks voice-note replies. `workers-ai` (default) = Workers AI only (no Arabic); `elevenlabs` = ElevenLabs
+ *  for Arabic and for every language the Workers AI model lacks, Workers AI for the rest (docs/VOICE-REPLIES.md#elevenlabs-provider). */
+export type VoiceReplyProvider = "workers-ai" | "elevenlabs";
+/** ELEVENLABS_MODEL_ID default (tested live on the public API on 2026-10-20; eleven_v3 also works). */
+export const DEFAULT_ELEVENLABS_MODEL_ID = "eleven_v4";
+/** ARABIC_REPLY_DIALECT: the dialect the agent is asked to write spoken Arabic replies in (lib/voice-style.ts). */
+export type ArabicReplyDialect = "lebanese" | "none";
 
 export interface Config {
   waAccessToken?: string;
@@ -103,6 +110,18 @@ export interface Config {
   voiceMaxSeconds: number;
   /** VOICE_TIMEOUT_MS (default 15000, 2000 to 20000): text-to-speech call timeout */
   voiceTimeoutMs: number;
+  /** VOICE_REPLY_PROVIDER (default workers-ai): `elevenlabs` speaks Arabic (and languages Workers AI lacks) with ElevenLabs */
+  voiceReplyProvider: VoiceReplyProvider;
+  /** ELEVENLABS_API_KEY (secret): sent only to api.elevenlabs.io (xi-api-key header). Never logged or returned. */
+  elevenlabsApiKey?: string;
+  /** ELEVENLABS_VOICE_ID: the owner's chosen ElevenLabs voice (letters and digits) */
+  elevenlabsVoiceId?: string;
+  /** ELEVENLABS_MODEL_ID (default eleven_v4) */
+  elevenlabsModelId: string;
+  /** ELEVENLABS_MAX_CHARS (default 600, 20 to 1500): longer replies go as text (ElevenLabs bills per character) */
+  elevenlabsMaxChars: number;
+  /** ARABIC_REPLY_DIALECT (default lebanese; `none` turns the hint off): style hint for Arabic replies that will be spoken */
+  arabicReplyDialect: ArabicReplyDialect;
 }
 
 export const DEFAULT_WAKE_TYPES = [
@@ -209,6 +228,12 @@ export function loadConfig(env: Env): Config {
     voiceMaxChars: intIn(env.VOICE_MAX_CHARS, 400, 20, 1500),
     voiceMaxSeconds: intIn(env.VOICE_MAX_SECONDS, 45, 5, 120),
     voiceTimeoutMs: intIn(env.VOICE_TIMEOUT_MS, 15000, 2000, 20000),
+    voiceReplyProvider: env.VOICE_REPLY_PROVIDER?.trim().toLowerCase() === "elevenlabs" ? "elevenlabs" : "workers-ai",
+    elevenlabsApiKey: env.ELEVENLABS_API_KEY?.trim() || undefined,
+    elevenlabsVoiceId: /^[A-Za-z0-9]{8,40}$/.test(env.ELEVENLABS_VOICE_ID?.trim() ?? "") ? env.ELEVENLABS_VOICE_ID!.trim() : undefined,
+    elevenlabsModelId: /^[a-z0-9_]{3,60}$/.test(env.ELEVENLABS_MODEL_ID?.trim() ?? "") ? env.ELEVENLABS_MODEL_ID!.trim() : DEFAULT_ELEVENLABS_MODEL_ID,
+    elevenlabsMaxChars: intIn(env.ELEVENLABS_MAX_CHARS, 600, 20, 1500),
+    arabicReplyDialect: /^(none|off|0|false)$/i.test(env.ARABIC_REPLY_DIALECT?.trim() ?? "") ? "none" : "lebanese",
   };
 }
 

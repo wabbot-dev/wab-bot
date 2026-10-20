@@ -166,7 +166,7 @@ export const ADMIN_TOOLS: Tool[] = [
         read_only: true,
         config_present: {
           WA_ACCESS_TOKEN: !!cfg.waAccessToken, WA_APP_SECRET: !!cfg.waAppSecret, WA_VERIFY_TOKEN: !!cfg.waVerifyToken, MCP_TOKEN: !!cfg.mcpToken,
-          ADMIN_TOKEN: !!cfg.adminToken, CRON_SECRET: !!cfg.cronSecret, WAKE_URL: !!cfg.wakeUrl, WAKE_KEY: !!cfg.wakeKey, XAI_API_KEY: !!cfg.xaiApiKey,
+          ADMIN_TOKEN: !!cfg.adminToken, CRON_SECRET: !!cfg.cronSecret, WAKE_URL: !!cfg.wakeUrl, WAKE_KEY: !!cfg.wakeKey, XAI_API_KEY: !!cfg.xaiApiKey, ELEVENLABS_API_KEY: !!cfg.elevenlabsApiKey,
           ADMIN_MCP_TOKEN: true, phone_number_ids: cfg.phoneNumberIds.length,
         },
         controls: ov.controls,
@@ -494,7 +494,7 @@ function transcriptOut(t: CallTranscript, l: CallLog, reveal: boolean) {
 export function scrub(ctx: Ctx, value: unknown): unknown {
   const red = new Redactor();
   const c = ctx.cfg;
-  for (const s of [c.waAccessToken, c.waAppSecret, c.waVerifyToken, c.mcpToken, c.adminToken, c.cronSecret, c.wakeKey, c.xaiApiKey, c.adminMcpToken]) red.add(s);
+  for (const s of [c.waAccessToken, c.waAppSecret, c.waVerifyToken, c.mcpToken, c.adminToken, c.cronSecret, c.wakeKey, c.xaiApiKey, c.elevenlabsApiKey, c.adminMcpToken]) red.add(s);
   const text = red.redact(JSON.stringify(value));
   return JSON.parse(text);
 }

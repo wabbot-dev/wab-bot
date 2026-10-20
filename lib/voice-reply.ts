@@ -6,10 +6,15 @@
  * uploaded to this number's Meta media store and sent as an audio message with voice: true. The reply text is always stored in
  * history. Any failure on the way (unsupported language, cap, model error, encoder, upload) sends the plain text instead and is
  * counted in get_overview's media block. Nothing is retried, nothing is logged but short codes, and no audio is persisted.
+ *
+ * VOICE_REPLY_PROVIDER=elevenlabs (lib/tts-elevenlabs.ts) speaks Arabic, and every language the Workers AI model lacks, with the
+ * owner's ElevenLabs voice instead; ElevenLabs returns Ogg Opus directly, so that path needs no encoder and no Durable Object.
  */
 import { fetchTimeout, type Ctx } from "./ctx";
 import { aiErrorCode, oggOpusSeconds, recordCounts, type AiRunner, type MediaCounts } from "./media";
 import type { Config } from "./config";
+import { speakElevenLabs } from "./tts-elevenlabs";
+import { spokenStyle } from "./voice-style";
 import type { Conv, Msg } from "./types";
 
 export type ReplyAs = "auto" | "text" | "voice";
@@ -77,7 +82,7 @@ export function speakable(text: string): string {
 }
 
 type Prep =
-  | { ok: true; mediaId: string; seconds: number; bytes: number }
+  | { ok: true; mediaId: string; seconds: number; bytes: number; provider: "workers-ai" | "elevenlabs" }
   | { ok: false; code: string; count: Partial<MediaCounts> };
 
 async function bytesOf(out: unknown): Promise<Uint8Array | null> {
@@ -102,7 +107,7 @@ export function isMonoOggOpus(b: Uint8Array): boolean {
 }
 
 export interface SpeakArgs { text: string; lang: string; model: string; maxSeconds: number; timeoutMs: number }
-export type SpeakResult = { ok: true; ogg: Uint8Array; seconds: number; ttsBytes: number } | { ok: false; code: string; count: Partial<MediaCounts> };
+export type SpeakResult = { ok: true; ogg: Uint8Array; seconds: number; ttsBytes: number; provider?: "workers-ai" | "elevenlabs" } | { ok: false; code: string; count: Partial<MediaCounts> };
 /** Text-to-speech + encoding in one step. In production a Durable Object runs it (src/call-do.ts), so the model's large audio
  *  answer is decoded and encoded there (30 s CPU per invocation) and only the small Ogg file comes back to the request. */
 export type VoiceSpeaker = (a: SpeakArgs) => Promise<SpeakResult>;
@@ -141,11 +146,41 @@ export async function speak(ai: AiRunner, encode: VoiceEncoder, a: SpeakArgs): P
   return { ok: true, ogg: r.ogg, seconds: r.seconds, ttsBytes: audio.length };
 }
 
+export type TtsProvider = "workers-ai" | "elevenlabs";
+
+/**
+ * Which provider speaks `lang`. Workers AI (the default) keeps every language its model speaks. With VOICE_REPLY_PROVIDER=elevenlabs,
+ * Arabic, and any language the Workers AI model lacks, go to ElevenLabs (its eleven_* models are multilingual). null = no voice.
+ */
+export function ttsProviderFor(cfg: Config, lang: string): TtsProvider | null {
+  const workers = !!ttsLanguages(cfg.voiceTtsModel)[lang];
+  if (cfg.voiceReplyProvider === "elevenlabs" && /^[a-z]{2}$/.test(lang) && (lang === "ar" || !workers)) return "elevenlabs";
+  return workers ? "workers-ai" : null;
+}
+
+/** Languages the configured providers can speak, for get_overview ("*" = any other language, through ElevenLabs). */
+export function voiceLanguagesOf(cfg: Config): string[] {
+  const w = Object.keys(ttsLanguages(cfg.voiceTtsModel));
+  return cfg.voiceReplyProvider === "elevenlabs" ? ["ar", ...w.filter((l) => l !== "ar"), "*"] : w;
+}
+
 /** Speak `text` in `lang` with the configured model: through ctx.speakVoice (the Durable Object), or `inline` in this request (self-test). */
 export async function synthesize(ctx: Ctx, text: string, lang: string, where: "do" | "inline" = "do"): Promise<SpeakResult> {
   const cfg = ctx.cfg;
   const a: SpeakArgs = { text, lang, model: cfg.voiceTtsModel, maxSeconds: cfg.voiceMaxSeconds, timeoutMs: cfg.voiceTimeoutMs };
-  if (!ttsLanguages(a.model)[lang]) return { ok: false, code: `voice_language_unsupported_${lang}`.slice(0, 40), count: { voice_language_unsupported: 1 } };
+  const provider = ttsProviderFor(cfg, lang);
+  if (!provider) return { ok: false, code: `voice_language_unsupported_${lang}`.slice(0, 40), count: { voice_language_unsupported: 1 } };
+  if (provider === "elevenlabs") {
+    // a network call, not CPU work: it runs in this request (no Durable Object needed); the key goes to api.elevenlabs.io only
+    try {
+      return await speakElevenLabs(ctx.fetch, {
+        text, apiKey: cfg.elevenlabsApiKey ?? "", voiceId: cfg.elevenlabsVoiceId ?? "", modelId: cfg.elevenlabsModelId,
+        maxChars: cfg.elevenlabsMaxChars, maxSeconds: cfg.voiceMaxSeconds, timeoutMs: cfg.voiceTimeoutMs,
+      });
+    } catch {
+      return { ok: false, code: "voice_tts_el_error", count: { voice_tts_failed: 1 } };
+    }
+  }
   try {
     if (where === "inline") {
       if (!ctx.ai || !ctx.encodeVoiceInline) return { ok: false, code: "voice_unavailable", count: {} };
@@ -188,10 +223,28 @@ export async function prepareVoice(ctx: Ctx, c: Conv, text: string, askedLang?: 
   if (s.ogg.length > VOICE_MAX_OGG_BYTES) return { ok: false, code: "voice_too_long", count: {} };
   const up = await uploadVoice(ctx, c.phone_number_id, s.ogg);
   if (!up.ok) return { ok: false, code: up.code, count: { voice_upload_failed: 1 } };
-  return { ok: true, mediaId: up.id, seconds: s.seconds, bytes: s.ogg.length };
+  ctx.log("voice_prepared", { conv: c.id, provider: s.provider ?? "workers-ai", ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, upload: "ok" });
+  return { ok: true, mediaId: up.id, seconds: s.seconds, bytes: s.ogg.length, provider: s.provider ?? "workers-ai" };
 }
 
 /** Counters only; never fails the send. */
 export async function recordVoice(ctx: Ctx, count: Partial<MediaCounts>, failure?: string): Promise<void> {
   try { await recordCounts(ctx, count, failure); } catch { /* counters only */ }
+}
+
+/**
+ * What get_history tells the agent about a coming voice reply (absent while VOICE_REPLIES is off): whether the reply will be spoken
+ * (`expected`, mirror of a customer voice note) or may be (`on` mode with reply_as "voice"), and the wording to use when it is Arabic.
+ */
+export function voiceReplyHint(cfg: Config, c: Conv): Record<string, unknown> | null {
+  if (cfg.voiceReplies === "off") return null;
+  const expected = chooseVoice(cfg, c, "auto").voice;
+  const style = spokenStyle(cfg.arabicReplyDialect);
+  return {
+    mode: cfg.voiceReplies,
+    expected,
+    provider: cfg.voiceReplyProvider,
+    max_chars: cfg.voiceReplyProvider === "elevenlabs" ? Math.min(cfg.voiceMaxChars, cfg.elevenlabsMaxChars) : cfg.voiceMaxChars,
+    ...(style && (expected || cfg.voiceReplies === "on") ? { arabic_style: style } : {}),
+  };
 }
