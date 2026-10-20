@@ -8,7 +8,7 @@ import { claimConversation, escalateConversation, getHistory } from "../lib/tool
 import { activate, adminReq, cid, getConv, inboundPayload, makeHarness, post, WA } from "./helpers";
 
 const HOOK = "https://alerts.example.test/hook";
-const OWNER = "15550009999";
+const OWNER = "15550000099";
 const KEY = "alert-key-" + "0123456789abcdef";
 
 function alertNet(h: ReturnType<typeof makeHarness>, status = 200) {
