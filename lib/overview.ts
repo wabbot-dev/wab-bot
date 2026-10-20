@@ -4,7 +4,7 @@ import { CONTROLS_KEY, controlsOf } from "./controls";
 import { readAll, REJECTIONS_KEY } from "./store";
 import type { Conv, ConvState, Rejections } from "./types";
 import { FREE_NEURONS_PER_DAY, MEDIA_METRICS_KEY, NEURONS_PER_AUDIO_MINUTE, NEURONS_PER_M_TOKENS, NEURONS_PER_TTS_1K_CHARS, NEURONS_PER_TTS_MINUTE, utcDay, zeroCounts, type MediaMetrics } from "./media";
-import { ttsLanguages } from "./voice-reply";
+import { voiceLanguagesOf } from "./voice-reply";
 
 /**
  * get_overview: ONE read-only health snapshot for routines and staff. Counts, ages, NAMES and booleans only.
@@ -113,7 +113,11 @@ function mediaOverview(ctx: Ctx, m: MediaMetrics | null, now: number): Json {
   const vis = NEURONS_PER_M_TOKENS[cfg.mediaVisionModel];
   const ttsMin = NEURONS_PER_TTS_MINUTE[cfg.voiceTtsModel];
   const tts1k = NEURONS_PER_TTS_1K_CHARS[cfg.voiceTtsModel];
-  const tts = ttsMin !== undefined ? (today.voice_seconds / 60) * ttsMin : tts1k !== undefined ? (today.voice_chars / 1000) * tts1k : today.voice_sent ? null : 0;
+  // Workers AI speech only: replies spoken by ElevenLabs cost no Neurons (they use the owner's ElevenLabs characters instead)
+  const waSec = Math.max(0, today.voice_seconds - today.voice_el_seconds);
+  const waChars = Math.max(0, today.voice_chars - today.voice_el_chars);
+  const waSent = Math.max(0, today.voice_sent - today.voice_el_sent);
+  const tts = ttsMin !== undefined ? (waSec / 60) * ttsMin : tts1k !== undefined ? (waChars / 1000) * tts1k : waSent ? null : 0;
   const est = stt !== undefined && vis !== undefined && tts !== null
     ? Math.round((today.audio_seconds / 60) * stt + (today.vision_input_tokens * vis.in + today.vision_output_tokens * vis.out) / 1e6 + tts)
     : null;
@@ -128,7 +132,14 @@ function mediaOverview(ctx: Ctx, m: MediaMetrics | null, now: number): Json {
     max_image_bytes: cfg.mediaMaxImageBytes,
     voice_replies: cfg.voiceReplies,
     voice_tts_model: cfg.voiceTtsModel,
-    voice_languages: Object.keys(ttsLanguages(cfg.voiceTtsModel)),
+    voice_languages: voiceLanguagesOf(cfg),
+    voice_reply_provider: cfg.voiceReplyProvider,
+    ...(cfg.voiceReplyProvider === "elevenlabs"
+      ? { elevenlabs: { key_present: !!cfg.elevenlabsApiKey, voice_id_set: !!cfg.elevenlabsVoiceId, model_id: cfg.elevenlabsModelId, max_chars: cfg.elevenlabsMaxChars, style_tag_set: !!cfg.voiceStyleTag } }
+      : {}),
+    ...(cfg.voiceReplyProvider === "xai" ? { xai: { key_present: !!cfg.xaiApiKey, voice: cfg.xaiTtsVoice, arabic_locale: cfg.xaiTtsArabicLocale ?? null } } : {}),
+    pronunciations_count: Object.keys(cfg.voicePronunciations).length,
+    arabic_reply_dialect: cfg.arabicReplyDialect,
     voice_speaker_present: !!ctx.speakVoice,
     voice_max_chars: cfg.voiceMaxChars,
     voice_max_seconds: cfg.voiceMaxSeconds,

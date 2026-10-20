@@ -1,9 +1,22 @@
+import { parsePronunciations } from "./voice-pronounce";
+import { styleTagOf } from "./voice-style";
 /** Workers AI defaults for inbound media (docs/MEDIA.md). */
 export const DEFAULT_STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
 export const DEFAULT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
 /** Workers AI text-to-speech default for optional voice-note replies (docs/VOICE-REPLIES.md). */
 export const DEFAULT_TTS_MODEL = "@cf/myshell-ai/melotts";
 export type VoiceRepliesMode = "off" | "mirror" | "on";
+/** VOICE_REPLY_PROVIDER: who speaks voice-note replies. `workers-ai` (default) = Workers AI only (no Arabic); `xai` (the owner's xAI
+ *  key, same as calls) or `elevenlabs` (the owner's ElevenLabs key and voice) speak Arabic and every language the Workers AI model lacks,
+ *  Workers AI keeps the rest (docs/VOICE-REPLIES.md). */
+export type VoiceReplyProvider = "workers-ai" | "elevenlabs" | "xai";
+/** ELEVENLABS_MODEL_ID default (tested live on the public API on 2026-10-20; eleven_v3 also works). */
+export const DEFAULT_ELEVENLABS_MODEL_ID = "eleven_v4";
+/** XAI_TTS_VOICE default (docs.x.ai text-to-speech: every voice speaks every supported language) */
+export const DEFAULT_XAI_TTS_VOICE = "eve";
+/** ARABIC_REPLY_DIALECT: optional preset for spoken Arabic replies (lib/voice-style.ts). Default none. */
+export type ArabicReplyDialect = "none" | "msa" | "lebanese" | "gulf" | "egyptian";
+export const ARABIC_DIALECTS: readonly ArabicReplyDialect[] = ["none", "msa", "lebanese", "gulf", "egyptian"];
 
 export interface Config {
   waAccessToken?: string;
@@ -103,6 +116,26 @@ export interface Config {
   voiceMaxSeconds: number;
   /** VOICE_TIMEOUT_MS (default 15000, 2000 to 20000): text-to-speech call timeout */
   voiceTimeoutMs: number;
+  /** VOICE_REPLY_PROVIDER (default workers-ai): `elevenlabs` speaks Arabic (and languages Workers AI lacks) with ElevenLabs */
+  voiceReplyProvider: VoiceReplyProvider;
+  /** ELEVENLABS_API_KEY (secret): sent only to api.elevenlabs.io (xi-api-key header). Never logged or returned. */
+  elevenlabsApiKey?: string;
+  /** ELEVENLABS_VOICE_ID: the owner's chosen ElevenLabs voice (letters and digits) */
+  elevenlabsVoiceId?: string;
+  /** ELEVENLABS_MODEL_ID (default eleven_v4) */
+  elevenlabsModelId: string;
+  /** ELEVENLABS_MAX_CHARS (default 600, 20 to 1500): longer replies go as text (ElevenLabs bills per character) */
+  elevenlabsMaxChars: number;
+  /** VOICE_STYLE_TAG (optional, e.g. "[warm, friendly]"): the owner's delivery direction for tag-aware ElevenLabs models (eleven_v3/v4) */
+  voiceStyleTag?: string;
+  /** VOICE_PRONUNCIATIONS (optional): the owner's "written => spoken" pairs for the spoken copy (lib/voice-pronounce.ts) */
+  voicePronunciations: Record<string, string>;
+  /** XAI_TTS_VOICE (default eve): the xAI voice for VOICE_REPLY_PROVIDER=xai (a built-in name or the owner's custom voice id) */
+  xaiTtsVoice: string;
+  /** XAI_TTS_ARABIC_LOCALE (optional ar-EG | ar-SA | ar-AE): overrides the locale picked from the dialect preset */
+  xaiTtsArabicLocale?: string;
+  /** ARABIC_REPLY_DIALECT (default none): optional preset (msa, lebanese, gulf, egyptian) for Arabic replies that will be spoken */
+  arabicReplyDialect: ArabicReplyDialect;
 }
 
 export const DEFAULT_WAKE_TYPES = [
@@ -209,6 +242,16 @@ export function loadConfig(env: Env): Config {
     voiceMaxChars: intIn(env.VOICE_MAX_CHARS, 400, 20, 1500),
     voiceMaxSeconds: intIn(env.VOICE_MAX_SECONDS, 45, 5, 120),
     voiceTimeoutMs: intIn(env.VOICE_TIMEOUT_MS, 15000, 2000, 20000),
+    voiceReplyProvider: ((p) => (p === "elevenlabs" || p === "xai" ? p : "workers-ai"))(env.VOICE_REPLY_PROVIDER?.trim().toLowerCase()),
+    elevenlabsApiKey: env.ELEVENLABS_API_KEY?.trim() || undefined,
+    elevenlabsVoiceId: /^[A-Za-z0-9]{8,40}$/.test(env.ELEVENLABS_VOICE_ID?.trim() ?? "") ? env.ELEVENLABS_VOICE_ID!.trim() : undefined,
+    elevenlabsModelId: /^[a-z0-9_]{3,60}$/.test(env.ELEVENLABS_MODEL_ID?.trim() ?? "") ? env.ELEVENLABS_MODEL_ID!.trim() : DEFAULT_ELEVENLABS_MODEL_ID,
+    elevenlabsMaxChars: intIn(env.ELEVENLABS_MAX_CHARS, 600, 20, 1500),
+    voiceStyleTag: styleTagOf(env.VOICE_STYLE_TAG),
+    voicePronunciations: parsePronunciations(env.VOICE_PRONUNCIATIONS),
+    xaiTtsVoice: /^[A-Za-z0-9_-]{1,80}$/.test(env.XAI_TTS_VOICE?.trim() ?? "") ? env.XAI_TTS_VOICE!.trim() : DEFAULT_XAI_TTS_VOICE,
+    xaiTtsArabicLocale: /^ar-(EG|SA|AE)$/.test(env.XAI_TTS_ARABIC_LOCALE?.trim() ?? "") ? env.XAI_TTS_ARABIC_LOCALE!.trim() : undefined,
+    arabicReplyDialect: ((d) => ((ARABIC_DIALECTS as readonly string[]).includes(d) ? (d as ArabicReplyDialect) : "none"))(env.ARABIC_REPLY_DIALECT?.trim().toLowerCase() ?? ""),
   };
 }
 

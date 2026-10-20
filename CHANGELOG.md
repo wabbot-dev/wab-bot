@@ -4,6 +4,14 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Features
+- **Arabic and other-language voice-note replies** ([docs/VOICE-REPLIES.md](docs/VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)), off unless the owner sets `VOICE_REPLY_PROVIDER=xai` (the xAI key already used for calls; `XAI_TTS_VOICE`, `XAI_TTS_ARABIC_LOCALE`) or `=elevenlabs` (`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` default `eleven_v4`, `ELEVENLABS_MAX_CHARS` 600). Voice replies stay off by default. Workers AI languages are unchanged. Every provider error, including quota and rate limits, sends the text instead (`voice_tts_xai_*`, `voice_tts_el_*`); counters in `get_overview`; keys never logged or returned.
+- **Optional dialect presets** for spoken Arabic (`ARABIC_REPLY_DIALECT`: `none` default, `msa`, `lebanese`, `gulf`, `egyptian`): `get_history` returns `voice_reply` (`expected`, `provider`, `max_chars`, `dialect`, `arabic_style`).
+- **Optional pronunciation list** (`VOICE_PRONUNCIATIONS`) and **style tag** (`VOICE_STYLE_TAG`, tag-aware ElevenLabs models), applied to the spoken copy only; the stored reply never changes.
+
+### Changed
+- `scripts/hygiene-scan.sh`: ElevenLabs is no longer flagged as an out-of-scope voice provider (it is now an owner-selectable voice-reply provider); a new detector flags `sk_` style API keys, and the log/MCP shape filter redacts them.
+
 ## [0.3.0] - 2026-10-20 (preview)
 
 Media understanding: customers' voice notes are transcribed and their images described with Workers AI in your own Cloudflare account, inside the free daily allowance, with a plain fallback marker on any failure. Optional voice-note replies, off by default (`mirror` mode recommended); no Arabic text-to-speech exists on Workers AI, so Arabic replies stay text.

@@ -359,7 +359,8 @@ export async function adminVoiceSelftest(ctx: Ctx, req: Request): Promise<Respon
   const t1 = Date.now();
   if (!s.ok) return Response.json({ ok: false, error: s.code, ms: t1 - t0 });
   if (q("audio") === "1") return new Response(s.ogg as unknown as BodyInit, { headers: { "content-type": "audio/ogg; codecs=opus", "cache-control": "no-store" } });
-  const out: Json = { ok: true, lang, model: ctx.cfg.voiceTtsModel, where, tts_and_encode_ms: t1 - t0, tts_bytes: s.ttsBytes, ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, mono_ogg_opus: isMonoOggOpus(s.ogg) };
+  const el = s.provider === "elevenlabs";
+  const out: Json = { ok: true, lang, provider: s.provider ?? "workers-ai", model: el ? ctx.cfg.elevenlabsModelId : s.provider === "xai" ? `xai:${ctx.cfg.xaiTtsVoice}` : ctx.cfg.voiceTtsModel, where: el ? "worker" : where, tts_and_encode_ms: t1 - t0, tts_bytes: s.ttsBytes, ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, mono_ogg_opus: isMonoOggOpus(s.ogg) };
   if (q("upload") === "1") {
     if (!pn || !ctx.cfg.waAccessToken) return Response.json({ ...out, ok: false, error: "needs_phone_number_id_and_token" });
     const up = await uploadVoice(ctx, pn, s.ogg);
@@ -371,6 +372,6 @@ export async function adminVoiceSelftest(ctx: Ctx, req: Request): Promise<Respon
     } catch { /* reported as nulls */ }
     out.upload = { media_id_returned: true, meta_mime_type: typeof meta.mime_type === "string" ? meta.mime_type : null, meta_file_size: typeof meta.file_size === "number" ? meta.file_size : null, ms: Date.now() - t1 };
   }
-  ctx.log("admin", { action: "voice_selftest", where, ok: true });
+  ctx.log("admin", { action: "voice_selftest", where, provider: s.provider ?? "workers-ai", ogg_bytes: s.ogg.length, ok: true });
   return Response.json(out);
 }

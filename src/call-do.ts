@@ -9,6 +9,7 @@ import { getCtx } from "./runtime";
 import { ensureSecrets } from "./setup";
 import { encodeInIsolate } from "./voice-wasm";
 import { speak, type SpeakArgs, type SpeakResult } from "../lib/voice-reply";
+import { speakXai } from "../lib/tts-xai";
 
 /**
  * One Durable Object per voice call (named by xAI's call id). It owns the realtime socket for the length of the call: a Worker request
@@ -56,6 +57,17 @@ export class CallSession extends DurableObject<Env> {
    * Workers Free request allows (10 ms) while a Durable Object invocation gets 30 s. Text in, Ogg Opus bytes out; nothing is stored or logged.
    */
   async speakVoice(a: SpeakArgs): Promise<SpeakResult> {
+    if (a.xai) {
+      // xAI text-to-speech (VOICE_REPLY_PROVIDER=xai): the key is read HERE from this deployment's own config, never passed in the call
+      await ensureSecrets(this.env);
+      const key = this.ctx0().cfg.xaiApiKey ?? "";
+      const x = a.xai;
+      return speakXai((...f) => fetch(...f), encodeInIsolate, {
+        text: String(a.text).slice(0, 1500), apiKey: key, voice: String(x.voice).slice(0, 80), language: String(x.language).slice(0, 10),
+        maxChars: Math.min(1500, Math.max(20, Math.floor(x.maxChars))), maxSeconds: Math.min(120, Math.max(1, Math.floor(a.maxSeconds))),
+        timeoutMs: Math.min(20000, Math.max(1000, Math.floor(a.timeoutMs))), replace: x.replace,
+      });
+    }
     if (!this.env.AI) return { ok: false, code: "voice_unavailable", count: {} };
     const ai = this.env.AI;
     const runner = { run: (model: string, input: Record<string, unknown>) => ai.run(model as Parameters<Ai["run"]>[0], input as never) as Promise<unknown> };

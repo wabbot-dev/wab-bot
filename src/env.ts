@@ -21,6 +21,16 @@ export interface Env {
   VOICE_MAX_CHARS?: string;
   VOICE_MAX_SECONDS?: string;
   VOICE_TIMEOUT_MS?: string;
+  VOICE_REPLY_PROVIDER?: string;
+  ELEVENLABS_API_KEY?: string;
+  ELEVENLABS_VOICE_ID?: string;
+  ELEVENLABS_MODEL_ID?: string;
+  ELEVENLABS_MAX_CHARS?: string;
+  VOICE_STYLE_TAG?: string;
+  VOICE_PRONUNCIATIONS?: string;
+  XAI_TTS_VOICE?: string;
+  XAI_TTS_ARABIC_LOCALE?: string;
+  ARABIC_REPLY_DIALECT?: string;
   // secrets (wrangler secret put)
   WA_ACCESS_TOKEN?: string;
   WA_APP_SECRET?: string;
