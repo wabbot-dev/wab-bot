@@ -188,10 +188,10 @@ test("MCP: a failing secrets provider degrades to secrets:null, never an error",
   assert.equal(JSON.parse(res.result.content[0].text).secrets, null);
 });
 
-test("MCP: start_conversation and get_overview are the only tools added and none of the tools can change global controls", async () => {
+test("MCP: twelve agent tools (start_conversation, get_overview, report_payment, submit_request added) and none of the tools can change global controls", async () => {
   const h = makeHarness();
   const list: any = await (await rpcOver(h)("tools/list", {})).json();
   const names = list.result.tools.map((t: any) => t.name);
-  assert.equal(names.length, 10);
+  assert.equal(names.length, 12);
   for (const n of names) assert.ok(!/set_|auto_reply|launch|takeover|delete/.test(n), n);
 });

@@ -116,14 +116,14 @@ test("memory limiter stays bounded under a flood of distinct keys", async () => 
 });
 
 // ------------------------------------------------------------------------------------------------ protocol
-test("protocol: initialize, tools/list (14 tools, strict schemas, annotations), POST only, body size and batch limits", async () => {
+test("protocol: initialize, tools/list (17 tools, strict schemas, annotations), POST only, body size and batch limits", async () => {
   const r = rig();
   const init = await r.rpc("initialize", { protocolVersion: "2025-06-18" });
   assert.equal(init.result.protocolVersion, "2025-06-18");
   assert.equal(init.result.serverInfo.name, "wab-bot-admin");
   const list = await r.rpc("tools/list", {});
   const names = list.result.tools.map((t: any) => t.name).sort();
-  assert.deepEqual(names, ["arm_calling", "calling_status", "check_for_update", "disarm_calling", "erase_call_log", "erase_conversation", "get_call_log", "get_conversation", "get_status", "get_usage_summary", "get_version", "list_call_logs", "list_conversations", "setup_check"]);
+  assert.deepEqual(names, ["arm_calling", "calling_status", "check_for_update", "directory_delete", "directory_list", "directory_upsert", "disarm_calling", "erase_call_log", "erase_conversation", "get_call_log", "get_conversation", "get_status", "get_usage_summary", "get_version", "list_call_logs", "list_conversations", "setup_check"]);
   for (const t of list.result.tools) {
     assert.equal(t.inputSchema.additionalProperties, false, t.name);
     assert.equal(typeof t.annotations.readOnlyHint, "boolean", t.name);

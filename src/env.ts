@@ -64,6 +64,7 @@ export interface Env {
   CALL_ALLOWED_CALLERS?: string;
   CALL_MAX_SECONDS?: string;
   CALL_SIP_WEBHOOKS?: string;
+  CALL_SIP_TARGET?: string;
   CALL_BUDGET_SECONDS?: string;
   CALL_VOICE?: string;
   CALL_LANGUAGE_HINT?: string;
@@ -89,6 +90,13 @@ export interface Env {
   // owner-only binding (never self-provisioned): numbers a bot-started message may reach before they ever wrote in
   OUTREACH_ALLOWLIST?: string;
   OUTBOUND_MEDIA_HOSTS?: string;
+  BUSINESS_MODE?: string;
+  BOT_LANGUAGE?: string;
+  IDENTITY_CHECK?: string;
+  CUSTOMER_DETAILS?: string;
+  BOOKING_WEBHOOK_URL?: string;
+  BOOKING_WEBHOOK_KEY?: string;
+  PAYMENT_CHECK?: string;
   GRAPH_VERSION?: string;
   LAUNCH_MODE?: string;
   TEST_RECIPIENTS?: string;

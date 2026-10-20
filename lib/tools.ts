@@ -12,6 +12,7 @@ import { readAll, update, updateMulti } from "./store";
 import type { Conv, HourCounter, OutRec } from "./types";
 import { armedOf, runWake, settleWakeOnClaim } from "./wake";
 import { alertsConfigured, ESCALATION_CATEGORIES, scheduleAlert } from "./alerts";
+import { businessView, getContact, reportPayment, submitRequest, type RequestArgs } from "./business";
 import { chooseVoice, prepareVoice, recordVoice, voiceReplyHint, type ReplyAs, type TtsProvider } from "./voice-reply";
 
 type Json = Record<string, unknown>;
@@ -105,6 +106,7 @@ export async function markReadTyping(ctx: Ctx, pn: string, wamid: string): Promi
 export async function getHistory(ctx: Ctx, id: string, lease: string, limit = 20): Promise<Json> {
   if (!CONV_ID_RE.test(id)) return { ok: false, error: "not_found" };
   const n = Math.min(50, Math.max(1, Math.floor(limit)));
+  let seen: Conv | null = null;
   // Writes only when it advances seenSeq beyond what the claim already covered.
   const r = await update<Conv, Json>(ctx, convKeyOf(id), (c) => {
     if (!c) return { next: undefined, result: { ok: false, error: "not_found" } };
@@ -130,11 +132,16 @@ export async function getHistory(ctx: Ctx, id: string, lease: string, limit = 20
     };
     const vh = voiceReplyHint(ctx.cfg, c);
     if (vh) view.voice_reply = vh as Json;
+    seen = structuredClone(c);
     if (c.inSeq <= seenUpTo(c)) return { next: undefined, result: view };
     c.seenSeq = c.inSeq;
     c.updatedAt = now;
     return { next: c, result: view };
   });
+  const sc = seen as Conv | null;
+  // consumer mode with no identity check reads nothing extra (same cost as before); otherwise one read of the owner's directory entry
+  const needContact = ctx.cfg.businessMode !== "consumers" || ctx.cfg.identityCheck !== "none";
+  if (r.result.ok === true && sc) r.result.business = businessView(ctx, sc, needContact ? await getContact(ctx, sc.wa_id) : null);
   return r.result;
 }
 
@@ -745,4 +752,24 @@ export async function getControls(ctx: Ctx, id?: string): Promise<Json> {
       : null;
   }
   return out;
+}
+
+// ---------------------------------------------------------------- business mode tools (lib/business.ts, docs/BUSINESS-MODE.md)
+const leaseCheck = (ctx: Ctx, lease: string) => (c: Conv): string | null => {
+  const now = ctx.now();
+  normalize(c, now);
+  if (c.deleted) return "not_found";
+  return leaseOk(c, lease, now) ? null : "lease_invalid_or_expired";
+};
+
+/** The customer says they paid: recorded as CLAIMED (never as paid), staff alerted, staff verify in /admin. */
+export async function reportPaymentTool(ctx: Ctx, id: string, lease: string, a: { amount?: string; reference?: string; method?: string }): Promise<Json> {
+  if (!CONV_ID_RE.test(id)) return { ok: false, error: "not_found" };
+  return reportPayment(ctx, convKeyOf(id), leaseCheck(ctx, lease), a);
+}
+
+/** Pass a booking / order / quote request to the owner's own system (BOOKING_WEBHOOK_URL). */
+export async function submitRequestTool(ctx: Ctx, id: string, lease: string, a: RequestArgs): Promise<Json> {
+  if (!CONV_ID_RE.test(id)) return { ok: false, error: "not_found" };
+  return submitRequest(ctx, convKeyOf(id), leaseCheck(ctx, lease), a);
 }

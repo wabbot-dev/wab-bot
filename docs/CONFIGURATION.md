@@ -70,6 +70,11 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 | `VOICE_TTS_MODEL` | Workers AI text-to-speech model (default `@cf/myshell-ai/melotts`: English, French, Spanish, Chinese, Japanese, Korean; no Arabic, see `VOICE_REPLY_PROVIDER`) |
 | `VOICE_MAX_CHARS`, `VOICE_MAX_SECONDS`, `VOICE_TIMEOUT_MS` | Caps (default 400 characters, 45 s of audio) and the text-to-speech timeout (default 15000 ms); over a cap the text is sent |
 | `VOICE_REPLY_PROVIDER` | `workers-ai` (default), `xai` (your xAI key, as for calls) or `elevenlabs` (your ElevenLabs voice): Arabic, and languages the Workers AI model lacks, are spoken by that provider ([VOICE-REPLIES.md](VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)) |
+| `BUSINESS_MODE`, `BOT_LANGUAGE` | `consumers` (default), `businesses` or `both`; `auto` or preferred language codes ([BUSINESS-MODE.md](BUSINESS-MODE.md)) |
+| `IDENTITY_CHECK`, `CUSTOMER_DETAILS` | `none` / `known_number` / `details`; fields the agent collects before orders and account requests |
+| `PAYMENT_CHECK` | `staff`: staff-verified payment claims (default off) |
+| `BOOKING_WEBHOOK_URL`, `BOOKING_WEBHOOK_KEY` (secret) | The bookings/orders hook and its Bearer key |
+| `CALL_SIP_TARGET` | `xai` (default) or another voice agent's SIP `host[:port]` ([VOICE-CALLS.md](VOICE-CALLS.md#another-voice-agent-callsiptarget)) |
 | `OUTBOUND_MEDIA_HOSTS` | If set, documents and images sent by URL must come from these hosts ([OUTBOUND.md](OUTBOUND.md)) |
 | `ALERT_WEBHOOK_URL`, `ALERT_WEBHOOK_KEY` (secret) | Instant alert webhook (https) and its Bearer key ([ALERTS.md](ALERTS.md)) |
 | `ALERT_WHATSAPP_TO`, `ALERT_TEMPLATE`, `ALERT_TEMPLATE_LANGUAGE` | Owner/staff numbers for WhatsApp alerts; approved template (one body parameter), language (default `en`) |

@@ -64,6 +64,18 @@ export interface Config {
   alertTemplateLanguage: string;
   alertEvents: string[];
   alertAdminUrl?: string;
+  /** business mode and profile settings (lib/business.ts, docs/BUSINESS-MODE.md) */
+  businessMode: "consumers" | "businesses" | "both";
+  /** BOT_LANGUAGE: "auto" (answer in the customer's language) or preferred language codes, first = default (e.g. "ar,en") */
+  botLanguages: string[];
+  /** IDENTITY_CHECK: none (default) | known_number (account details only to numbers in the directory) | details (also confirm CUSTOMER_DETAILS) */
+  identityCheck: "none" | "known_number" | "details";
+  /** CUSTOMER_DETAILS: fields the agent collects before an order/booking/account request, e.g. name,company,email */
+  customerDetails: string[];
+  bookingWebhookUrl?: string;
+  bookingWebhookKey?: string;
+  /** PAYMENT_CHECK: off (default) | staff: customers' "I paid" claims are recorded, staff are alerted and verify in /admin */
+  paymentCheck: "off" | "staff";
   maxMessages: number;
   staleWakeMs: number;
   mcpToken?: string;
@@ -95,6 +107,8 @@ export interface Config {
   callDiscloseAi: boolean;
   /** CALL_SIP_WEBHOOKS=1: ask Meta for SIP call webhooks (call_created / terminate) while armed, and log their type, call id, status and times. Test aid, off by default. */
   callSipWebhooks: boolean;
+  /** CALL_SIP_TARGET: "xai" (default: the built-in xAI voice agent) or "host[:port]" of another SIP voice agent (docs/VOICE-CALLS.md) */
+  callSipTarget: { kind: "xai" } | { kind: "custom"; host: string; port: number };
   callRecordingLine: boolean;
   /** CALL_TRANSCRIPTS (default ON): keep a text transcript of each call in this Worker's own Durable Object. Never audio. */
   callTranscripts: boolean;
@@ -169,6 +183,16 @@ export const DEFAULT_WAKE_TYPES = [
 
 export type Env = Record<string, string | undefined>;
 
+/** "xai" / empty = built-in; otherwise a public SIP host name with an optional port (default 5061, TLS). Anything else falls back to xai. */
+export function sipTargetOf(v: string | undefined): Config["callSipTarget"] {
+  const t = (v ?? "").trim().toLowerCase();
+  if (!t || t === "xai") return { kind: "xai" };
+  const m = /^(?:sips?:)?([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+)(?::([0-9]{2,5}))?$/.exec(t);
+  if (!m || /^[0-9.]+$/.test(m[1]!)) return { kind: "xai" };
+  const port = m[5] ? Number(m[5]) : 5061;
+  if (port < 1 || port > 65535) return { kind: "xai" };
+  return { kind: "custom", host: m[1]!, port };
+}
 const list = (v: string | undefined): string[] =>
   (v ?? "").split(",").map((s) => s.trim()).filter(Boolean);
 
@@ -240,6 +264,16 @@ export function loadConfig(env: Env): Config {
     alertTemplateLanguage: /^[a-z]{2}(_[A-Z]{2})?$/.test(env.ALERT_TEMPLATE_LANGUAGE?.trim() ?? "") ? env.ALERT_TEMPLATE_LANGUAGE!.trim() : "en",
     alertEvents: env.ALERT_EVENTS?.trim() ? list(env.ALERT_EVENTS).map((x) => x.toLowerCase()) : ["escalation", "payment_claimed", "booking_failed", "test"],
     alertAdminUrl: /^https:\/\/[^\s]{4,300}$/.test(env.ALERT_ADMIN_URL?.trim() ?? "") ? env.ALERT_ADMIN_URL!.trim() : undefined,
+    businessMode: (["consumers", "businesses", "both"] as const).find((m) => m === env.BUSINESS_MODE?.trim().toLowerCase()) ?? "consumers",
+    botLanguages: (() => {
+      const l = list(env.BOT_LANGUAGE).map((x) => x.toLowerCase()).filter((x) => /^[a-z]{2}$/.test(x));
+      return l.length ? l.slice(0, 5) : ["auto"];
+    })(),
+    identityCheck: (["none", "known_number", "details"] as const).find((m) => m === env.IDENTITY_CHECK?.trim().toLowerCase()) ?? "none",
+    customerDetails: list(env.CUSTOMER_DETAILS).map((x) => x.toLowerCase().replace(/[^a-z0-9_ ]/g, "").trim()).filter(Boolean).slice(0, 10),
+    bookingWebhookUrl: /^https:\/\/[^\s]{4,500}$/.test(env.BOOKING_WEBHOOK_URL?.trim() ?? "") ? env.BOOKING_WEBHOOK_URL!.trim() : undefined,
+    bookingWebhookKey: env.BOOKING_WEBHOOK_KEY?.trim() || undefined,
+    paymentCheck: env.PAYMENT_CHECK?.trim().toLowerCase() === "staff" ? "staff" : "off",
     maxMessages: intIn(env.MAX_MESSAGES, 50, 20, 200),
     staleWakeMs: intIn(env.STALE_WAKE_MS, 300000, 60000, 86400000),
     mcpToken: env.MCP_TOKEN || undefined,
@@ -258,6 +292,7 @@ export function loadConfig(env: Env): Config {
     callLanguageHint: /^(auto|[a-z]{2,3}(-[A-Za-z]{2,4})?)$/.test(env.CALL_LANGUAGE_HINT?.trim() ?? "") ? env.CALL_LANGUAGE_HINT!.trim() : "auto",
     callDiscloseAi: /^(1|true|yes|on)$/i.test(env.CALL_DISCLOSE_AI?.trim() ?? ""),
     callSipWebhooks: env.CALL_SIP_WEBHOOKS?.trim() === "1",
+    callSipTarget: sipTargetOf(env.CALL_SIP_TARGET),
     callRecordingLine: /^(1|true|yes|on)$/i.test(env.CALL_RECORDING_LINE?.trim() ?? ""),
     callTranscripts: !/^(0|false|no|off)$/i.test(env.CALL_TRANSCRIPTS?.trim() ?? ""),
     callTranscriptDays: intIn(env.CALL_TRANSCRIPT_RETENTION_DAYS, 30, 1, 365),

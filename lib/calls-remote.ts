@@ -59,7 +59,7 @@ export async function readDisplayNumber(r: Remote, pnid: string): Promise<{ ok: 
 }
 
 /** Meta calling ON over SIP: SDES + G.711 (what the live-proven setup used), pointing at xAI's SIP endpoint. `sipWebhooks` (CALL_SIP_WEBHOOKS=1, test aid) asks Meta for call_created / terminate webhooks. */
-export async function enableMetaSip(r: Remote, pnid: string, opts: { sipWebhooks?: boolean } = {}): Promise<{ ok: boolean; status: number }> {
+export async function enableMetaSip(r: Remote, pnid: string, opts: { sipWebhooks?: boolean; target?: { host: string; port: number } } = {}): Promise<{ ok: boolean; status: number }> {
   const res = await r.fetch(graph(r, `${pnid}/settings`), {
     method: "POST",
     headers: gh(r),
@@ -69,7 +69,7 @@ export async function enableMetaSip(r: Remote, pnid: string, opts: { sipWebhooks
         srtp_key_exchange_protocol: "SDES",
         call_icon_visibility: "DEFAULT",
         audio: { additional_codecs: ["PCMA", "PCMU"] },
-        sip: { status: "ENABLED", webhook_delivery: opts.sipWebhooks ? "ENABLED" : "DISABLED", servers: [{ hostname: SIP_HOST, port: SIP_PORT }] },
+        sip: { status: "ENABLED", webhook_delivery: opts.sipWebhooks ? "ENABLED" : "DISABLED", servers: [{ hostname: opts.target?.host ?? SIP_HOST, port: opts.target?.port ?? SIP_PORT }] },
       },
     }),
   });
@@ -130,10 +130,12 @@ export interface ArmRemoteArgs {
   goNumber?: string;
   webhookUrl: string;
   label: string;
+  /** another SIP voice agent (CALL_SIP_TARGET): skip the xAI registration; Meta's SIP credentials stay with Meta and that provider */
+  customTarget?: boolean;
 }
 
 export type ArmRemoteResult =
-  | { ok: true; number: string; xaiPhoneId: string; signingSecret: string; prior: { srtp?: string; codecs: string[] } }
+  | { ok: true; number: string; xaiPhoneId?: string; signingSecret?: string; prior: { srtp?: string; codecs: string[] } }
   | { ok: false; step: string; status?: number; xaiPhoneId?: string; prior?: { srtp?: string; codecs: string[] } };
 
 /**
@@ -149,8 +151,9 @@ export async function prepareArm(r: Remote, a: ArmRemoteArgs): Promise<ArmRemote
   if (!st.ok) return { ok: false, step: "read_calling_settings", status: st.status };
   const off = (v?: string) => v === undefined || v === "DISABLED" || v === "NOT_SET";
   if (!off(st.calling) || !off(st.sip)) return { ok: false, step: "calling_already_enabled_on_number" };
-  if (!st.sipPassword) return { ok: false, step: "no_sip_password" };
+  if (!st.sipPassword && !a.customTarget) return { ok: false, step: "no_sip_password" };
   const prior = { srtp: st.srtp, codecs: st.codecs };
+  if (a.customTarget) return { ok: true, number: num.digits, prior };
   const e164 = "+" + num.digits;
   const have = await findNumbers(r.fetch, r.xaiKey, e164);
   if (!have.ok) return { ok: false, step: "xai_list_numbers", status: have.status, prior };
@@ -159,7 +162,7 @@ export async function prepareArm(r: Remote, a: ArmRemoteArgs): Promise<ArmRemote
     number: e164,
     name: a.label,
     digestUser: num.digits,
-    digestPassword: st.sipPassword,
+    digestPassword: st.sipPassword!,
     allowedAddresses: splitTo16(META_AS32934_V4),
     webhookUrl: a.webhookUrl,
   });

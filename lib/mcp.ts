@@ -7,7 +7,7 @@ import { InvalidParams, serveJsonRpc, type Args, type ToolMeta } from "./mcp-rpc
 import type { ReplyAs } from "./voice-reply";
 import {
   claimConversation, escalateConversation, finishConversation, getControls, getHistory, listPending,
-  releaseConversation, sendReply, startConversation,
+  releaseConversation, reportPaymentTool, sendReply, startConversation, submitRequestTool,
 } from "./tools";
 
 /** Agent MCP route (`/mcp`, Bearer MCP_TOKEN). The JSON-RPC core is shared with the admin route: lib/mcp-rpc.ts. */
@@ -201,6 +201,34 @@ const TOOLS: Tool[] = [
     inputSchema: obj({ conversation_id: convSchema, lease: leaseSchema, reason: { type: "string", minLength: 1, maxLength: 500 },
       category: { type: "string", enum: ["human_requested", "complaint", "payment", "order", "booking", "account", "identity", "urgent", "other"] } }, ["conversation_id", "lease", "reason"]),
     run: (ctx, a) => escalateConversation(ctx, conv(a)!, lease(a), str(a, "reason", { min: 1, max: 500, required: true })!, str(a, "category", { min: 1, max: 40 })),
+  },
+  {
+    name: "report_payment",
+    description: "Only when get_history shows business.payment (the owner turned on PAYMENT_CHECK=staff): the customer SAYS they paid. Records the claim (never as paid), alerts staff, who verify it in /admin. " +
+      "Never tell the customer the payment is confirmed until get_history shows business.payment.status verified. No card numbers.",
+    inputSchema: obj({ conversation_id: convSchema, lease: leaseSchema, amount: { type: "string", maxLength: 40 }, reference: { type: "string", maxLength: 80 }, method: { type: "string", maxLength: 40 } }, ["conversation_id", "lease"]),
+    run: (ctx, a) => reportPaymentTool(ctx, conv(a)!, lease(a), { amount: str(a, "amount", { max: 40 }), reference: str(a, "reference", { max: 80 }), method: str(a, "method", { max: 40 }) }),
+  },
+  {
+    name: "submit_request",
+    description: "Only when get_history shows business.requests (the owner connected a booking/order system): pass a booking, order, quote or callback request to that system once the customer has confirmed the details. " +
+      "kind: booking, order, quote, callback or other. summary: one short paragraph. fields: the details (date, time, items, quantity, name, company...). idempotency_key REQUIRED and stable for this request. " +
+      "Confirm to the customer only what the result confirms (reference). On booking_hook_failed, say a person will confirm and escalate.",
+    inputSchema: obj({
+      conversation_id: convSchema, lease: leaseSchema,
+      kind: { type: "string", enum: ["booking", "order", "quote", "callback", "other"] },
+      summary: { type: "string", minLength: 1, maxLength: 1000 },
+      fields: { type: "object", maxProperties: 20, additionalProperties: { type: ["string", "number", "boolean"] } },
+      idempotency_key: { type: "string", minLength: 1, maxLength: 100 },
+    }, ["conversation_id", "lease", "kind", "summary", "idempotency_key"]),
+    run: (ctx, a) => {
+      const f = a.fields;
+      if (f !== undefined && (typeof f !== "object" || f === null || Array.isArray(f) || Object.keys(f).length > 20)) throw new InvalidParams("fields must be an object with at most 20 entries");
+      return submitRequestTool(ctx, conv(a)!, lease(a), {
+        kind: str(a, "kind", { min: 1, max: 20, required: true })!, summary: str(a, "summary", { min: 1, max: 1000, required: true })!,
+        fields: f as Record<string, unknown> | undefined, idempotency_key: str(a, "idempotency_key", { min: 1, max: 100, required: true })!,
+      });
+    },
   },
   {
     name: "get_controls",

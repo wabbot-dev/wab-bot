@@ -8,8 +8,8 @@ you configure at least one channel. Code: [lib/alerts.ts](../lib/alerts.ts).
 | Event (`ALERT_EVENTS`) | When |
 | --- | --- |
 | `escalation` | The agent calls `escalate_conversation` (with a `category`: `human_requested`, `complaint`, `payment`, `order`, `booking`, `account`, `identity`, `urgent`, `other`) |
-| `payment_claimed` | The agent records that a customer says they paid (`report_payment`, see the business-mode doc) |
-| `booking_failed` | The booking/order hook could not pass a request to your system (see the business-mode doc) |
+| `payment_claimed` | The agent records that a customer says they paid (`report_payment`, see [BUSINESS-MODE.md](BUSINESS-MODE.md#payments-staff-verified)) |
+| `booking_failed` | The booking/order hook could not pass a request to your system ([BUSINESS-MODE.md](BUSINESS-MODE.md#bookings-and-orders-hook)) |
 | `test` | The owner presses "test alert" (`POST /api/admin` with `{"action":"test_alert"}`, owner token only) |
 
 All four are on by default once a channel is set; `ALERT_EVENTS=escalation` limits them.

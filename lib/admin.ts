@@ -1,3 +1,4 @@
+import { decidePayment, deleteContact, listContacts, upsertContact } from "./business";
 import { alertsConfigured, sendAlert } from "./alerts";
 import { bearerOf, tokenOk } from "./crypto";
 import type { Ctx } from "./ctx";
@@ -168,7 +169,7 @@ export async function adminErase(ctx: Ctx, req: Request, id: string): Promise<Re
 
 export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
   if (!adminAuthorized(ctx, req)) return unauthorized();
-  let body: { action?: string; value?: string; conversation_id?: string; text?: string; template_name?: string; template_language?: string; idempotency_key?: string; ttl_minutes?: number };
+  let body: { action?: string; value?: string; conversation_id?: string; text?: string; template_name?: string; template_language?: string; idempotency_key?: string; ttl_minutes?: number; media?: unknown; contact?: Record<string, unknown>; number?: string; tag?: string; known?: boolean; offset?: number };
   try {
     body = await req.json();
   } catch {
@@ -189,6 +190,17 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
     const rec = await sendAlert(ctx, { event: "test", reason: "test alert from the admin page" });
     return Response.json({ ok: !!rec, webhook: rec?.webhook ?? null, whatsapp: rec?.whatsapp ?? null });
   }
+  if (action === "contact_upsert" || action === "contact_delete" || action === "contact_list") {
+    // the account directory (docs/BUSINESS-MODE.md) is the OWNER's: staff sessions can read conversations but not change who is a known account
+    if (!ownerAuthorized(ctx, req)) return unauthorized();
+    const r = action === "contact_upsert"
+      ? await upsertContact(ctx, typeof body.contact === "object" && body.contact ? body.contact : {})
+      : action === "contact_delete"
+        ? await deleteContact(ctx, body.number)
+        : await listContacts(ctx, { tag: typeof body.tag === "string" ? body.tag : undefined, known: typeof body.known === "boolean" ? body.known : undefined, offset: Number.isInteger(body.offset) ? Math.max(0, body.offset!) : 0, limit: 100 });
+    ctx.log("admin", { action, ok: r.ok === true });
+    return Response.json(r, { status: r.ok === true ? 200 : 400 });
+  }
   if (action === "staff_invite") {
     if (!ownerAuthorized(ctx, req)) return unauthorized(); // a staff session can never mint more sessions
     const inv = await createInvite(ctx, typeof body.ttl_minutes === "number" ? body.ttl_minutes : 15);
@@ -196,13 +208,18 @@ export async function adminPost(ctx: Ctx, req: Request): Promise<Response> {
   }
   const id = body?.conversation_id;
   if (typeof id !== "string" || !CONV_ID_RE.test(id)) return bad();
-  const known = ["takeover", "release", "release_hold", "reopen", "resolve", "wake", "delete_conversation", "reply", "opt_out", "opt_in"];
+  const known = ["takeover", "release", "release_hold", "reopen", "resolve", "wake", "delete_conversation", "reply", "opt_out", "opt_in", "payment_verify"];
   if (!action || !known.includes(action)) return bad();
 
   if (action === "delete_conversation") return eraseConversation(ctx, id);
+  if (action === "payment_verify") {
+    const r = await decidePayment(ctx, convKeyOf(id), String(body.value ?? ""));
+    ctx.log("admin", { action, conv: id, ok: r.ok === true });
+    return Response.json(r, { status: r.error === "not_found" ? 404 : 200 });
+  }
   if (action === "reply") {
     const str = (v: unknown, max: number) => (typeof v === "string" && v.length <= max ? v : undefined);
-    const r = await staffReply(ctx, { conversation_id: id, text: str(body.text, 4000), template_name: str(body.template_name, 100), template_language: str(body.template_language, 20), idempotency_key: str(body.idempotency_key, 100) });
+    const r = await staffReply(ctx, { conversation_id: id, text: str(body.text, 4000), template_name: str(body.template_name, 100), template_language: str(body.template_language, 20), idempotency_key: str(body.idempotency_key, 100), media: body.media });
     ctx.log("admin", { action, conv: id, ok: r.ok === true });
     return Response.json(r, { status: r.error === "not_found" ? 404 : 200 });
   }

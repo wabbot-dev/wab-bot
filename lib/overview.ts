@@ -93,6 +93,11 @@ export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promis
       meta_setup_enabled: cfg.metaSetupEnabled,
     },
     rejections: { count: (rej?.value.count ?? 0) + ctx.state.rejPending, last: iso(rej?.value.last) },
+    business: {
+      mode: cfg.businessMode, language: cfg.botLanguages, identity_check: cfg.identityCheck, customer_details_count: cfg.customerDetails.length,
+      payment_check: cfg.paymentCheck, booking_hook_configured: !!cfg.bookingWebhookUrl, outbound_media_hosts_count: cfg.outboundMediaHosts.length,
+      call_sip_target: cfg.callSipTarget.kind,
+    },
     alerts: (() => {
       const a = snap.get<AlertRecord>(ALERTS_KEY)?.value;
       return {

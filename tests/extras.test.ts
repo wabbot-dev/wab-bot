@@ -131,7 +131,7 @@ test("cron: Bearer CRON_SECRET required, retries due wakes", async () => {
   assert.equal((await getConv(h)).wake.status, "scheduled", "success is not persisted; claim records it");
 });
 
-test("MCP over HTTP: Bearer MCP_TOKEN, ten tools, calls work", async () => {
+test("MCP over HTTP: Bearer MCP_TOKEN, twelve tools, calls work", async () => {
   const h = makeHarness();
   await activate(h);
   await post(h, inboundPayload({ wamid: "wamid.MC1" }));
@@ -160,7 +160,7 @@ test("MCP over HTTP: Bearer MCP_TOKEN, ten tools, calls work", async () => {
   assert.equal((await route(new Request("https://x.test/mcp", { method: "GET" }))).status, 401);
   const list = await parse(await rpc("tools/list", {}));
   const names = list.result.tools.map((t: any) => t.name).sort();
-  assert.deepEqual(names, ["claim_conversation", "escalate_conversation", "finish_conversation", "get_controls", "get_history", "get_overview", "list_pending", "release_conversation", "send_reply", "start_conversation"]);
+  assert.deepEqual(names, ["claim_conversation", "escalate_conversation", "finish_conversation", "get_controls", "get_history", "get_overview", "list_pending", "release_conversation", "report_payment", "send_reply", "start_conversation", "submit_request"]);
   const send = list.result.tools.find((t: any) => t.name === "send_reply");
   assert.ok(!("to" in send.inputSchema.properties), "send_reply has no recipient field");
   const call = async (name: string, args: unknown) => {
@@ -226,7 +226,7 @@ test("MCP protocol: initialize negotiates a version, notifications get 202, batc
   const batch: any = await (await send([{ jsonrpc: "2.0", id: 1, method: "ping" }, { jsonrpc: "2.0", id: 2, method: "tools/list" }])).json();
   assert.equal(batch.length, 2);
   assert.deepEqual(batch[0].result, {});
-  assert.equal(batch[1].result.tools.length, 10);
+  assert.equal(batch[1].result.tools.length, 12);
   const nf: any = await (await send({ jsonrpc: "2.0", id: 3, method: "nope/nope" })).json();
   assert.equal(nf.error.code, -32601);
   const bad: any = await (await send({ jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "get_history", arguments: { conversation_id: "c_" + "0".repeat(20), lease: "short" } } })).json();

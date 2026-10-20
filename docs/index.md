@@ -20,6 +20,8 @@
 | Optional voice-note replies (off by default) | [VOICE-REPLIES.md](VOICE-REPLIES.md) |
 | Instant owner/staff alerts when a conversation needs a person (webhook and/or WhatsApp) | [ALERTS.md](ALERTS.md) |
 | Send documents, images, reply buttons, lists and templates with header/buttons | [OUTBOUND.md](OUTBOUND.md) |
+| Business mode: consumers, businesses or both; owner contact/account directory; payments; bookings/orders hook | [BUSINESS-MODE.md](BUSINESS-MODE.md) |
+| Moving a number off the WhatsApp Business app | [WHATSAPP-BUSINESS-APP.md](WHATSAPP-BUSINESS-APP.md) |
 | Answer WhatsApp voice calls (off by default, owner-gated) | [VOICE-CALLS.md](VOICE-CALLS.md) |
 | Check on my deployment, arm calling or read call logs through an owner-only MCP | [mcp.md](mcp.md) |
 | Fix a problem | [TROUBLESHOOTING.md](TROUBLESHOOTING.md) |

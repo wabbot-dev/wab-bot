@@ -90,6 +90,10 @@ export interface Conv {
   outs: Record<string, OutRec>;
   wake: WakeState;
   escalation?: { reason: string; at: number; category?: string };
+  /** a customer's "I paid" claim (PAYMENT_CHECK=staff): staff verify it in /admin; the agent never confirms a payment itself */
+  payment?: { status: "claimed" | "verified" | "rejected"; at: number; amount?: string; reference?: string; method?: string; decidedAt?: number };
+  /** requests passed to the owner's booking/order system (BOOKING_WEBHOOK_URL), newest last, max 20 */
+  requests?: { key: string; kind: string; at: number; ok: boolean; http?: number | "network"; reference?: string }[];
   hold?: { reason: string; at: number; replyKey?: string };
   /** set by an inbound STOP (or a staff action); START clears it. Every bot-started send is refused while set. */
   optOut?: { at: number; via: "customer" | "staff" };
