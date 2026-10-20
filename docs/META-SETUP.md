@@ -49,6 +49,32 @@ curl -s -X POST https://<worker>/api/admin/meta-setup -H "Authorization: Bearer 
 
 It reads `GET /{WABA_ID}/subscribed_apps`, subscribes with `POST` only if your app is missing, and reads it back. The step's facts list `before_app_ids` and `after_app_ids` (ids only); a `WARN` (`subscribed_apps_other_apps`) says when other apps were subscribed but yours was not. PASS only when your app id is listed afterwards. Later, the admin MCP `setup_check` repeats the read (GET only) when `WA_WABA_ID` is set (`WA_APP_ID` makes it exact).
 
+## A second bot on the same Meta app (never overwrite the first bot's webhook)
+
+A Meta app has ONE app-level webhook callback for every WhatsApp number it serves. If you add a second bot (for example a business
+line next to an existing consumer line) on the same app, moving that callback would silently cut the first bot off. So setup never
+replaces a callback that points to another deployment:
+
+- **The setup reads what Meta routes today first**: `GET /{phone-number-id}?fields=webhook_configuration` (the number's own view:
+  `phone_number`, `whatsapp_business_account`, `application`, needs no app secret) and `GET /{app-id}/subscriptions`.
+- **Free app (first bot):** the app-level callback is set, as before.
+- **App already serving another deployment:** the app level is left unchanged (`webhook_app_level` WARN, showing only that
+  deployment's host) and **only this number** is routed here with Meta's per-number override:
+  `POST /{phone-number-id}` with `webhook_configuration.override_callback_uri` (at most 200 characters) and `verify_token`, then read
+  back. Meta sends this number's events there and every other number's events to the app-level URL. The app must be subscribed to
+  the WABA (the `subscribed_apps` step). Source: Meta's "Override callback URL" guide for the WhatsApp Cloud API.
+- **This number or its WABA already routed to another deployment:** refused (FAIL), nothing changed.
+- **Replacing on purpose** (the other deployment is retired): send `replace_webhook: true` (route) or `--replace-webhook` (CLI). The
+  step then reports WARN with the old host.
+- **Choosing the level yourself:** `webhook_scope`: `auto` (default, as above), `phone`, `waba` (every number in this WABA:
+  `POST /{waba}/subscribed_apps` with `override_callback_uri`; `waba_override: true` still works) or `app`. CLI: `--phone-override`,
+  `--waba-override`.
+- `webhook_effective` reports where Meta now sends this number's events (this deployment or another host).
+
+Each deployment also answers **only its own numbers**: `WA_PHONE_NUMBER_IDS` lists them. An empty list answers **no** number (fail
+closed), and the setup route stores the setup number there when the list is empty (`phone_number_ids_stored`). `*` accepts any
+number on the app; use it only when one bot serves the whole app. Give each bot its own Worker name too ([DEPLOY.md](DEPLOY.md)).
+
 ## Keep the minted token inside the Worker (`store_token`)
 
 With `mint_token: true, store_token: true` (instead of `return_token: true`) the system-user token is minted, verified with `debug_token`, and written straight into this Worker's own secret store (the same store as `POST /api/admin/secrets`). It never appears in the response, a log or a chat; the step `system_user_token_stored` reports PASS, or WARN if a `WA_ACCESS_TOKEN` secret binding overrides it. If storing fails, the token falls back to the one-time `secret_delivery`.

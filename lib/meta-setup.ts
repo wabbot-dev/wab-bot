@@ -61,12 +61,16 @@ export interface Req {
   newDisplayName?: string;
   testTo?: string; testTemplate: string; testLanguage: string; confirm: boolean;
   webhookUrl?: string; webhookFields: string[]; wabaOverride: boolean;
+  /** where the callback goes: auto (default: app level only when it is free or already ours, else a per-number override), app, waba, phone */
+  webhookScope: "auto" | "app" | "waba" | "phone";
+  /** explicit confirmation to replace a callback that points to ANOTHER deployment (never the default) */
+  replaceWebhook: boolean;
 }
 const KEYS = new Set([
   "action", "steps", "continue_on_fail", "graph_version", "bootstrap_token", "app_secret", "app_id", "business_id", "waba_id", "phone_number_id",
   "system_user_id", "create_business", "system_user_name", "system_user_role", "mint_token", "return_token", "store_token", "force_mint", "phone", "code_method",
   "language", "code", "pin", "generate_pin", "force_register", "templates", "new_display_name", "to", "test_template", "test_language", "confirm",
-  "webhook_url", "webhook_fields", "waba_override",
+  "webhook_url", "webhook_fields", "waba_override", "webhook_scope", "replace_webhook",
 ]);
 class BadReq extends Error { constructor(public field: string, public reason: string) { super(reason); } }
 
@@ -122,6 +126,8 @@ export function parseReq(o: unknown): Req {
     confirm: bool("confirm"),
     webhookUrl: str("webhook_url", /^https:\/\/[^\s]{3,300}$/, 320),
     webhookFields: ["messages"], wabaOverride: bool("waba_override"),
+    webhookScope: (str("webhook_scope", /^(auto|app|waba|phone)$/, 5) as Req["webhookScope"] | undefined) ?? (bool("waba_override") ? "waba" : "auto"),
+    replaceWebhook: bool("replace_webhook"),
   };
   if (req.code && req.code.length !== 6) throw new BadReq("code", "must be 6 digits");
   if (b.create_business !== undefined) {
@@ -613,38 +619,97 @@ export class Setup {
       callback_url: url, verify_token: verify, subscribe_to_fields: q.webhookFields,
       note: "the verify token is only a handshake string (not the app secret); enter both values exactly, press Verify and save",
     };
-    const S = "webhook", N = "App-level webhook callback + verify token";
-    const app = this.ids.app_id, secret = this.appSecret;
-    const manual = (why: string) => { this.manual = dashboard; this.add(S, N, "WARN", `${why}. Enter the dashboard values returned under "manual".`, { mode: "manual_needed", callback_url: url }); };
-    if (!app) { manual("app_id unknown"); return; }
-    if (!secret) { manual("no app secret (send app_secret in the body, or set WA_APP_SECRET and redeploy)"); return; }
-    const appTok = `${app}|${secret}`;
-    this.r.add(appTok);
-    const read = async () => {
+    const S = "webhook", N = "Webhook callback + verify token (never silently replaces another deployment's)";
+    const app = this.ids.app_id, secret = this.appSecret, waba = this.ids.waba_id, pn = this.ids.phone_number_id;
+    const manual = (why: string) => {
+      this.manual = { ...dashboard, warning: "if this app's callback already points to ANOTHER bot, do not replace it there: re-run with webhook_scope \"phone\" so only this number is routed here" };
+      this.add(S, N, "WARN", `${why}. Enter the dashboard values returned under "manual".`, { mode: "manual_needed", callback_url: url });
+    };
+    const host = (u: string) => { try { return new URL(u).host; } catch { return "(unreadable)"; } };
+    const mine = (u: string | null | undefined) => !!u && sameUrl(u, url);
+    const refuse = (level: string, current: string, how: string) =>
+      this.add(S, N, "FAIL", `refused: the ${level} callback already points to another deployment (${host(current)}); nothing was changed. ${how}`, { mode: "refused", level, current_host: host(current), callback_url: url });
+
+    // 1. What does Meta route today? The number's own view (no app secret needed) is the most precise; else the app subscription.
+    type View = { phone: string | null; waba: string | null; app: string | null };
+    const readNumber = async (): Promise<View | null> => {
+      if (!pn) return null;
+      const r = await this.g.call("GET", `/${pn}`, { token: this.tok, query: { fields: "webhook_configuration" } });
+      if (!r.ok) return null;
+      const w = r.body?.webhook_configuration ?? {};
+      const s = (v: unknown) => (typeof v === "string" && v ? v : null);
+      return { phone: s(w.phone_number), waba: s(w.whatsapp_business_account), app: s(w.application) };
+    };
+    const appTok = app && secret ? `${app}|${secret}` : null;
+    if (appTok) this.r.add(appTok);
+    const readApp = async () => {
+      if (!appTok) return { ok: false as const, error: "no app secret" };
       const r = await this.g.call("GET", `/${app}/subscriptions`, { appToken: appTok });
       if (!r.ok) return { ok: false as const, error: r.error };
       const e = list(r.body).find((x) => x.object === "whatsapp_business_account");
       const fields: string[] = e && Array.isArray(e.fields) ? e.fields.map((f: any) => String(f.name ?? f)) : [];
-      const match = !!e && sameUrl(String(e.callback_url ?? ""), url) && q.webhookFields.every((f) => fields.includes(f));
-      return { ok: true as const, match, fields };
+      const cb = e ? String(e.callback_url ?? "") || null : null;
+      return { ok: true as const, current: cb, match: mine(cb) && q.webhookFields.every((f) => fields.includes(f)), fields };
     };
-    const b = await read();
-    if (!b.ok) manual(`app secret rejected or edge unavailable (${b.error})`);
-    else if (b.match) this.add(S, N, "PASS", "already set (skipped)", { mode: "app", callback_url: url, fields: b.fields, changed: false });
-    else {
-      const p = await this.g.call("POST", `/${app}/subscriptions`, { appToken: appTok, form: { object: "whatsapp_business_account", callback_url: url, verify_token: verify, fields: q.webhookFields.join(","), include_values: "true" } });
-      const a = await read();
-      if (a.ok && a.match) this.add(S, N, "PASS", "set at app level and read back", { mode: "app", callback_url: url, fields: a.fields, changed: true });
-      else manual(p.ok ? "POST accepted but the subscription does not read back as expected" : `POST refused: ${p.error}`);
-    }
-    if (q.wabaOverride) {
-      const waba = this.ids.waba_id;
-      if (!waba) { this.add("waba_override", "WABA-level callback override", "FAIL", "need waba_id"); return; }
+    const before = await readNumber();
+    const a0 = await readApp();
+    const appNow = a0.ok ? a0.current : before?.app ?? null;
+    const effective = before ? before.phone ?? before.waba ?? before.app : appNow;
+
+    // 2. Per-number override (Meta: POST /{phone-number-id} webhook_configuration.override_callback_uri; needs the app subscribed to the WABA)
+    const setPhone = async (): Promise<void> => {
+      if (!pn) { this.add(S, N, "FAIL", "a per-number override needs phone_number_id (send it, or run phone_add first)", { mode: "phone" }); return; }
+      if (url.length > 200) { this.add(S, N, "FAIL", "Meta accepts override callback URLs up to 200 characters", { mode: "phone" }); return; }
+      if (before?.phone && !mine(before.phone) && !q.replaceWebhook) { refuse("number-level", before.phone, "Re-run with replace_webhook:true only if that deployment is retired."); return; }
+      if (mine(before?.phone)) { this.add(S, N, "PASS", "this number is already routed here (skipped)", { mode: "phone", callback_url: url, changed: false }); return; }
+      const p = await this.g.call("POST", `/${pn}`, { token: this.tok, form: { webhook_configuration: JSON.stringify({ override_callback_uri: url, verify_token: verify }) } });
+      const after = await readNumber();
+      if (mine(after?.phone)) this.add(S, N, "PASS", "per-number callback override set and read back: only this number is routed here; the app-level callback was not touched", { mode: "phone", callback_url: url, changed: true, app_level_host: appNow ? host(appNow) : null });
+      else this.add(S, N, "FAIL", p.ok ? "override accepted but not visible afterwards" : `override refused: ${p.error}`, { mode: "phone" });
+    };
+    // 3. WABA-level override (every number in this WABA): POST /{waba}/subscribed_apps override_callback_uri
+    const setWaba = async (): Promise<void> => {
+      if (!waba) { this.add(S, N, "FAIL", "a WABA override needs waba_id", { mode: "waba" }); return; }
+      const g = await this.g.call("GET", `/${waba}/subscribed_apps`, { token: this.tok });
+      const cur = g.ok ? list(g.body).map((x) => String(x?.override_callback_uri ?? x?.whatsapp_business_api_data?.override_callback_uri ?? "")).find(Boolean) ?? null : null;
+      if (cur && !mine(cur) && !q.replaceWebhook) { refuse("WABA-level", cur, "Use webhook_scope \"phone\" instead, or replace_webhook:true only if that deployment is retired."); return; }
+      if (mine(cur)) { this.add(S, N, "PASS", "this WABA is already routed here (skipped)", { mode: "waba", callback_url: url, changed: false }); return; }
       const o = await this.g.call("POST", `/${waba}/subscribed_apps`, { token: this.tok, form: { override_callback_uri: url, verify_token: verify } });
       const v = await this.g.call("GET", `/${waba}/subscribed_apps`, { token: this.tok });
-      const hit = v.ok && list(v.body).some((x) => sameUrl(String(x?.whatsapp_business_api_data?.override_callback_uri ?? x?.override_callback_uri ?? ""), url));
-      this.add("waba_override", "WABA-level callback override", hit ? "PASS" : "FAIL", hit ? "override read back" : o.ok ? "override not visible afterwards" : `POST refused: ${o.error}`);
+      const hit = v.ok && list(v.body).some((x) => mine(String(x?.whatsapp_business_api_data?.override_callback_uri ?? x?.override_callback_uri ?? "")));
+      this.add(S, N, hit ? "PASS" : "FAIL", hit ? "WABA-level override set and read back (every number in this WABA is routed here)" : o.ok ? "override not visible afterwards" : `POST refused: ${o.error}`, { mode: "waba", callback_url: url, changed: hit });
+    };
+    // 4. App level (every WABA and number on this Meta app): only when free, already ours, or explicitly confirmed
+    const setApp = async (): Promise<void> => {
+      if (!app) { manual("app_id unknown"); return; }
+      if (!a0.ok) { manual(appTok ? `app secret rejected or edge unavailable (${a0.error})` : "no app secret (send app_secret in the body, or set WA_APP_SECRET and redeploy)"); return; }
+      if (a0.match) { this.add(S, N, "PASS", "already set (skipped)", { mode: "app", callback_url: url, fields: a0.fields, changed: false }); return; }
+      if (a0.current && !mine(a0.current) && !q.replaceWebhook) {
+        refuse("app-level", a0.current, "Every number on this Meta app would move here. Re-run with webhook_scope \"phone\" (recommended for a second bot), or replace_webhook:true only if that deployment is retired."); return;
+      }
+      const p = await this.g.call("POST", `/${app}/subscriptions`, { appToken: appTok!, form: { object: "whatsapp_business_account", callback_url: url, verify_token: verify, fields: q.webhookFields.join(","), include_values: "true" } });
+      const a = await readApp();
+      if (a.ok && a.match) this.add(S, N, a0.current && !mine(a0.current) ? "WARN" : "PASS", a0.current && !mine(a0.current) ? `replaced the app-level callback (was ${host(a0.current)}; confirmed with replace_webhook)` : "set at app level and read back", { mode: "app", callback_url: url, fields: a.fields, changed: true });
+      else manual(p.ok ? "POST accepted but the subscription does not read back as expected" : `POST refused: ${p.error}`);
+    };
+
+    const scope = q.webhookScope;
+    if (scope === "phone") await setPhone();
+    else if (scope === "waba") await setWaba();
+    else if (scope === "app") await setApp();
+    else {
+      // auto: a fresh app gets the app-level callback; an app already serving ANOTHER bot is left alone and only this number is routed here
+      const other = appNow && !mine(appNow) ? appNow : null;
+      const numberElsewhere = before?.phone && !mine(before.phone) ? before.phone : before?.waba && !mine(before.waba) ? before.waba : null;
+      if (numberElsewhere && !q.replaceWebhook) refuse(before?.phone && !mine(before.phone) ? "number-level" : "WABA-level", numberElsewhere, "This number is served by another deployment. Re-run with replace_webhook:true only if that deployment is retired.");
+      else if (other && pn) { this.add("webhook_app_level", "App-level callback belongs to another deployment", "WARN", `left unchanged (${host(other)}); routing only this number here with a per-number override`, { app_level_host: host(other) }); await setPhone(); }
+      else if (other) refuse("app-level", other, "Send phone_number_id so only this number is routed here (webhook_scope \"phone\"), or replace_webhook:true only if that deployment is retired.");
+      else await setApp();
     }
+    const after = await readNumber();
+    if (after) this.add("webhook_effective", "Where Meta now sends this number's events", mine(after.phone ?? after.waba ?? after.app) ? "PASS" : "WARN",
+      mine(after.phone ?? after.waba ?? after.app) ? "this deployment" : `another URL (${host(after.phone ?? after.waba ?? after.app ?? "")}) or none`,
+      { level: after.phone ? "phone" : after.waba ? "waba" : after.app ? "app" : "none", before_host: effective ? host(effective) : null });
   }
 
   // ---- templates / display name / test send ---------------------------------------------------------------------------------------------
@@ -798,6 +863,18 @@ export async function metaSetupPost(ctx: Ctx, req: Request, host: MetaSetupHost 
       }
       const bad = s.results.slice(before).find((x) => x.status === "FAIL");
       if (bad && !q.continueOnFail) blockedBy = bad.id;
+    }
+    // the number this deployment serves: an empty WA_PHONE_NUMBER_IDS serves none, so the setup number is stored once (never replaced)
+    const pnSel = s.ids.phone_number_id;
+    if (pnSel && !dry && q.steps.includes("webhook") && !ctx.cfg.phoneNumberIds.length && !ctx.cfg.acceptAnyPhoneNumber) {
+      const T = "phone_number_ids_stored", TN = "This deployment serves the setup number (WA_PHONE_NUMBER_IDS)";
+      if (!host.storeSecrets) { s.add(T, TN, "WARN", `set WA_PHONE_NUMBER_IDS=${pnSel} on this Worker: until then it answers no number`); }
+      else {
+        try { await host.storeSecrets({ WA_PHONE_NUMBER_IDS: pnSel }); s.add(T, TN, "PASS", "stored; other numbers on the same Meta app are ignored by this deployment", { phone_number_id: pnSel }); }
+        catch { s.add(T, TN, "WARN", `could not store it: set WA_PHONE_NUMBER_IDS=${pnSel} on this Worker`); }
+      }
+    } else if (pnSel && q.steps.includes("webhook") && ctx.cfg.phoneNumberIds.length && !ctx.cfg.phoneNumberIds.includes(pnSel)) {
+      s.add("phone_number_ids_mismatch", "WA_PHONE_NUMBER_IDS does not list the setup number", "WARN", `this deployment ignores ${pnSel}; add it to WA_PHONE_NUMBER_IDS if it should be served here`);
     }
     if (s.toStore) {
       const T = "system_user_token_stored", TN = "Token stored in this Worker";

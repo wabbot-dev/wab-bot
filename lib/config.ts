@@ -22,7 +22,10 @@ export interface Config {
   waAccessToken?: string;
   waAppSecret?: string;
   waVerifyToken?: string;
-  phoneNumberIds: string[]; // empty = accept all
+  /** WA_PHONE_NUMBER_IDS: the numbers this deployment serves. Empty = NONE (fail closed; meta-setup fills it with the setup number).
+   *  "*" = any number on the Meta app (explicit opt-in, for a single-bot app only). */
+  phoneNumberIds: string[];
+  acceptAnyPhoneNumber: boolean;
   templateAllowlist: string[]; // empty = no templates
   /** WA_WABA_ID: the WhatsApp Business Account id. Needed to address a number that has no conversation yet (start_conversation with `to`). */
   wabaId?: string;
@@ -182,7 +185,8 @@ export function loadConfig(env: Env): Config {
     waAccessToken: env.WA_ACCESS_TOKEN || undefined,
     waAppSecret: env.WA_APP_SECRET || undefined,
     waVerifyToken: env.WA_VERIFY_TOKEN || undefined,
-    phoneNumberIds: list(env.WA_PHONE_NUMBER_IDS),
+    phoneNumberIds: list(env.WA_PHONE_NUMBER_IDS).filter((x) => x !== "*"),
+    acceptAnyPhoneNumber: list(env.WA_PHONE_NUMBER_IDS).includes("*"),
     templateAllowlist: list(env.WA_TEMPLATE_ALLOWLIST),
     wabaId: /^\d{5,25}$/.test(env.WA_WABA_ID?.trim() ?? "") ? env.WA_WABA_ID!.trim() : undefined,
     appId: /^\d{5,25}$/.test(env.WA_APP_ID?.trim() ?? "") ? env.WA_APP_ID!.trim() : undefined,
@@ -212,7 +216,7 @@ export function loadConfig(env: Env): Config {
     callingMode: ((m) => (m === "test" || m === "live" ? m : "off"))(env.CALLING_MODE?.trim().toLowerCase()),
     callingGoNumber: digits(env.CALLING_GO_NUMBER ?? "") || undefined,
     callingBvDone: env.CALLING_BV_DONE?.trim() === "1",
-    callingPhoneNumberId: env.CALLING_PHONE_NUMBER_ID?.trim() || list(env.WA_PHONE_NUMBER_IDS)[0] || undefined,
+    callingPhoneNumberId: env.CALLING_PHONE_NUMBER_ID?.trim() || list(env.WA_PHONE_NUMBER_IDS).filter((x) => x !== "*")[0] || undefined,
     callAllowedCallers: list(env.CALL_ALLOWED_CALLERS).map(digits).filter(Boolean),
     callMaxSeconds: intIn(env.CALL_MAX_SECONDS, 120, 10, 600),
     callBudgetSeconds: intIn(env.CALL_BUDGET_SECONDS, 1200, 0, 10_000_000),
@@ -256,3 +260,9 @@ export function loadConfig(env: Env): Config {
 }
 
 export const normDigits = digits;
+
+/** Does this deployment serve phone number id `pn`? Listed ids only; an empty list serves none (a second bot on the same Meta app
+ *  must never answer the first bot's customers). "*" in WA_PHONE_NUMBER_IDS is the explicit opt-in to accept any number. */
+export function servesNumber(cfg: Pick<Config, "phoneNumberIds" | "acceptAnyPhoneNumber">, pn: string): boolean {
+  return cfg.acceptAnyPhoneNumber || cfg.phoneNumberIds.includes(pn);
+}

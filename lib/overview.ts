@@ -88,6 +88,7 @@ export async function getOverview(ctx: Ctx, secrets: SecretsInfo | null): Promis
       test_recipients_count: cfg.testRecipients.length,
       template_allowlist_count: cfg.templateAllowlist.length,
       phone_number_ids_count: cfg.phoneNumberIds.length,
+      phone_filter: cfg.acceptAnyPhoneNumber ? "any" : cfg.phoneNumberIds.length ? "listed" : "none_configured_rejecting",
       meta_setup_enabled: cfg.metaSetupEnabled,
     },
     rejections: { count: (rej?.value.count ?? 0) + ctx.state.rejPending, last: iso(rej?.value.last) },

@@ -38,7 +38,7 @@ export class Redactor {
 // ---------------------------------------------------------------------------------------------------------------------------------------
 const FORBIDDEN_FLAGS = ["token", "access-token", "system-user-token", "app-secret", "secret", "pin", "register-pin", "password"];
 const VALUE_FLAGS = ["waba-id", "phone-number-id", "webhook-url", "verify-token", "app-id", "graph-version", "test-to", "template", "template-lang", "write-secrets", "json-out", "worker-name", "project-dir"];
-const BOOL_FLAGS = ["register", "waba-override", "skip-app-subscription", "skip-handshake", "allow-expiring", "yes", "force", "push-cloudflare", "no-prompt", "help", "version"];
+const BOOL_FLAGS = ["register", "waba-override", "phone-override", "replace-webhook", "skip-app-subscription", "skip-handshake", "allow-expiring", "yes", "force", "push-cloudflare", "no-prompt", "help", "version"];
 
 export function parseArgs(argv) {
   const o = { flags: {}, errors: [] };
@@ -60,6 +60,8 @@ export function parseArgs(argv) {
   return o;
 }
 
+export function hostOf(u) { try { return new URL(u).host; } catch { return "(unreadable)"; } }
+
 export const HELP = `Meta (WhatsApp Cloud API) setup, run on your own device.
 
   node scripts/meta-setup.mjs [flags]
@@ -71,6 +73,9 @@ Flags
   --app-id <id>           Meta app id (default: read from debug_token)
   --graph-version <vNN.0> default ${DEFAULT_GRAPH_VERSION}
   --waba-override         ALSO set the callback on the WABA itself (POST /{waba}/subscribed_apps override_callback_uri). Off by default.
+  --phone-override        route ONLY this phone number to this bridge (POST /{phone-number-id} webhook_configuration.override_callback_uri);
+                          the app-level callback is left alone. Chosen automatically when the app already points to another deployment.
+  --replace-webhook       allow replacing a callback that points to ANOTHER deployment (app, WABA or number level). Never the default.
   --skip-app-subscription never try to set the app-level webhook; just print the dashboard values
   --skip-handshake        do not test the webhook handshake against your bridge first
   --allow-expiring        an expiring token is a WARN instead of FAIL (temporary 24h token from the API Setup page)
@@ -384,16 +389,43 @@ export async function main(argv, deps = {}) {
     if (!before.ok) step("webhook_auth", "App secret accepted by Meta (GET /{app}/subscriptions)", "FAIL", before.error);
     else {
       step("webhook_auth", "App secret accepted by Meta (GET /{app}/subscriptions)", "PASS");
-      const set = await g.request("POST", `/${appId}/subscriptions`, { token: appToken, form: { object: "whatsapp_business_account", callback_url: webhookUrl, verify_token: verifyToken, fields: "messages", include_values: "true" } });
-      if (!set.ok) info(`      app-level POST was refused: ${set.error}`);
-      const after = await readApp();
-      const m = after.ok ? matches(after.body) : { ok: false, why: after.error };
-      if (m.ok) { webhookDone = true; bundle.webhook.mode = "app"; bundle.webhook.callbackVerified = true; step("webhook", "Webhook callback + verify token set at app level (verified by GET)", "PASS", `fields: ${bundle.webhook.fields.join(",")}`); }
-      else step("webhook", "Webhook callback + verify token set at app level (verified by GET)", "FAIL", `${set.ok ? "POST accepted but " : ""}${m.why}. Fallback: set the dashboard values below, or retry with --waba-override`);
+      const cur = (Array.isArray(before.body?.data) ? before.body.data : []).find((x) => x && x.object === "whatsapp_business_account")?.callback_url || "";
+      const elsewhere = cur && !sameUrl(cur, webhookUrl);
+      if (elsewhere && !fl["replace-webhook"]) {
+        // a second bot on the same Meta app: never move the first bot's callback; route only this number here instead
+        step("webhook_app_level", "App-level callback belongs to another deployment", "WARN", `left unchanged (${hostOf(cur)}); routing only this number here (--phone-override). --replace-webhook would move every number`);
+        fl["phone-override"] = true;
+      } else if (fl["phone-override"]) {
+        info("      --phone-override: the app-level callback is left as it is");
+      } else {
+        const set = await g.request("POST", `/${appId}/subscriptions`, { token: appToken, form: { object: "whatsapp_business_account", callback_url: webhookUrl, verify_token: verifyToken, fields: "messages", include_values: "true" } });
+        if (!set.ok) info(`      app-level POST was refused: ${set.error}`);
+        const after = await readApp();
+        const m = after.ok ? matches(after.body) : { ok: false, why: after.error };
+        if (m.ok) { webhookDone = true; bundle.webhook.mode = "app"; bundle.webhook.callbackVerified = true; step("webhook", "Webhook callback + verify token set at app level (verified by GET)", elsewhere ? "WARN" : "PASS", `${elsewhere ? `replaced ${hostOf(cur)} (--replace-webhook); ` : ""}fields: ${bundle.webhook.fields.join(",")}`); }
+        else step("webhook", "Webhook callback + verify token set at app level (verified by GET)", "FAIL", `${set.ok ? "POST accepted but " : ""}${m.why}. Fallback: set the dashboard values below, or retry with --phone-override`);
+      }
+    }
+  }
+  if (fl["phone-override"]) {
+    const readPn = () => g.request("GET", `/${phoneId}`, { token, query: { fields: "webhook_configuration" } });
+    const pre = await readPn();
+    const curPn = pre.ok ? pre.body?.webhook_configuration?.phone_number || "" : "";
+    if (curPn && !sameUrl(curPn, webhookUrl) && !fl["replace-webhook"]) step("phone_override", "Per-number callback override", "FAIL", `refused: this number is already routed to another deployment (${hostOf(curPn)}); nothing changed. --replace-webhook only if that deployment is retired`);
+    else if (webhookUrl.length > 200) step("phone_override", "Per-number callback override", "FAIL", "Meta accepts override URLs up to 200 characters");
+    else {
+      const set = curPn && sameUrl(curPn, webhookUrl) ? { ok: true } : await g.request("POST", `/${phoneId}`, { token, json: { webhook_configuration: { override_callback_uri: webhookUrl, verify_token: verifyToken } } });
+      const ver = await readPn();
+      const hit = ver.ok && sameUrl(ver.body?.webhook_configuration?.phone_number || "", webhookUrl);
+      if (hit) { webhookDone = true; bundle.webhook.mode = "phone_override"; bundle.webhook.callbackVerified = true; step("phone_override", "Per-number callback override (verified by GET)", "PASS", "only this number is routed here"); }
+      else step("phone_override", "Per-number callback override (verified by GET)", "FAIL", set.ok ? "override not visible afterwards (is the app subscribed to the WABA?)" : set.error);
     }
   }
   if (fl["waba-override"]) {
-    const set = await g.request("POST", `/${wabaId}/subscribed_apps`, { token, form: { override_callback_uri: webhookUrl, verify_token: verifyToken } });
+    const pre = await readSubs();
+    const curW = (pre.ok && Array.isArray(pre.body?.data) ? pre.body.data : []).map((x) => x?.override_callback_uri || x?.whatsapp_business_api_data?.override_callback_uri || "").find(Boolean) || "";
+    const refusedW = curW && !sameUrl(curW, webhookUrl) && !fl["replace-webhook"];
+    const set = refusedW ? { ok: false, error: `refused: this WABA is already routed to another deployment (${hostOf(curW)}); nothing changed. Use --phone-override, or --replace-webhook only if that deployment is retired` } : await g.request("POST", `/${wabaId}/subscribed_apps`, { token, form: { override_callback_uri: webhookUrl, verify_token: verifyToken } });
     if (!set.ok) step("waba_override", "WABA-level callback override", "FAIL", set.error);
     else {
       const ver = await readSubs();

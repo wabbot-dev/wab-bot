@@ -1,7 +1,7 @@
 import { tokenOk, verifySignature } from "./crypto";
 import type { Ctx } from "./ctx";
 import { armWake, capMessages, convId, convKeyOf, MAX_SEEN_IDS, newConv, normalize, seenKey } from "./conv";
-import { normDigits } from "./config";
+import { normDigits, servesNumber } from "./config";
 import { isStoreBusy, REJECTIONS_KEY, update } from "./store";
 import type { Conv, Msg, OutRec } from "./types";
 import { fallbackText, pendingText, runMediaJob, wantsMedia, type MediaJob, type RawMedia } from "./media";
@@ -251,7 +251,7 @@ const short = (x: unknown, n = 40) => (typeof x === "string" || typeof x === "nu
 function logCallEvents(ctx: Ctx, v: any): void {
   if (!ctx.cfg.callSipWebhooks || !Array.isArray(v?.calls)) return;
   const pn = String(v?.metadata?.phone_number_id ?? "");
-  if (pn && ctx.cfg.phoneNumberIds.length && !ctx.cfg.phoneNumberIds.includes(pn)) return;
+  if (pn && !servesNumber(ctx.cfg, pn)) return;
   for (const c of v.calls.slice(0, 10)) {
     ctx.log("meta_call_event", {
       event: short(c?.event), call_id: short(c?.id, 80), status: short(c?.status), direction: short(c?.direction), duration: short(c?.duration),
@@ -284,7 +284,7 @@ export async function handleWebhookPost(ctx: Ctx, req: Request): Promise<Respons
           const v = ch.value ?? {};
           const pn = String(v.metadata?.phone_number_id ?? "");
           if (!pn) continue;
-          if (ctx.cfg.phoneNumberIds.length && !ctx.cfg.phoneNumberIds.includes(pn)) continue;
+          if (!servesNumber(ctx.cfg, pn)) { ctx.log("webhook_number_not_served", { configured: ctx.cfg.phoneNumberIds.length }); continue; }
           const own = normDigits(String(v.metadata?.display_phone_number ?? ""));
           const names = new Map<string, string>();
           for (const c of v.contacts ?? []) if (c?.wa_id && c?.profile?.name) names.set(String(c.wa_id), String(c.profile.name));

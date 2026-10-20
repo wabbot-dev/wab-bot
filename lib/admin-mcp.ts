@@ -200,7 +200,7 @@ export const ADMIN_TOOLS: Tool[] = [
       add("CRON_SECRET", !!cfg.cronSecret && cfg.cronSecret.length >= 16, "recommended", "Set CRON_SECRET if you call the retry endpoint over HTTP.");
       add("WAKE_URL", !!cfg.wakeUrl, "required", "Set WAKE_URL (https) where the content-free wake goes; without it the agent is never woken.");
       add("WAKE_KEY", !!cfg.wakeKey, "recommended", "Set WAKE_KEY if your wake endpoint needs a key.");
-      add("WA_PHONE_NUMBER_IDS", cfg.phoneNumberIds.length > 0, "recommended", "Restrict the bridge to your phone number id(s).");
+      add("WA_PHONE_NUMBER_IDS", cfg.phoneNumberIds.length > 0 || cfg.acceptAnyPhoneNumber, "required", "List your phone number id(s): with none, the bridge answers no number (meta-setup stores the setup number for you).");
       // Read-only Graph GET (no write): is the owner's app subscribed to the WABA? The usual cause of "the first message never arrives".
       let subscribed: { checked: boolean; app_ids_count?: number; own_app_listed?: boolean | null; error?: string } = { checked: false };
       if (cfg.wabaId && cfg.waAccessToken) {

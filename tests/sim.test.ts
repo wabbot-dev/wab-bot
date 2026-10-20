@@ -136,6 +136,16 @@ test("own-number echo and system messages are ignored", async () => {
   assert.equal(h.queue.length, 0);
 });
 
+test("WA_PHONE_NUMBER_IDS fails closed: empty serves no number (a second bot on the same app never answers the first bot's customers); * is the explicit opt-in", async () => {
+  const none = makeHarness({ WA_PHONE_NUMBER_IDS: "" });
+  await post(none, inboundPayload({ wamid: "wamid.N1" }));
+  assert.deepEqual(await none.store.keys("conv/"), []);
+  assert.ok(none.logs.some((l) => l.event === "webhook_number_not_served"));
+  const any = makeHarness({ WA_PHONE_NUMBER_IDS: "*" });
+  await post(any, inboundPayload({ wamid: "wamid.N2", pn: "9999999999999" }));
+  assert.equal((await any.store.keys("conv/")).length, 1);
+});
+
 test("wrong-recipient protection: recipient and sender are server-fixed", async () => {
   const h = makeHarness();
   await activate(h);

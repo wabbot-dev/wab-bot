@@ -48,7 +48,7 @@ Secrets (`wrangler secret put`, **or** self-provisioned through `POST /api/setup
 
 | Name | Purpose |
 |---|---|
-| `WA_PHONE_NUMBER_IDS` | accepted phone number ids (empty = any id on the app; the signature is still required). Recommended |
+| `WA_PHONE_NUMBER_IDS` | **Required.** The phone number ids this deployment serves, comma separated. Empty = **no** number is answered (fail closed; the setup route stores the setup number). `*` = any number on the Meta app (only when one bot serves the whole app) |
 | `WA_TEMPLATE_ALLOWLIST` | approved template names the agent may send (empty = none) |
 | `WA_WABA_ID` | your WhatsApp Business Account id: lets `start_conversation` address a number by `to`, and lets the admin MCP `setup_check` read the WABA's subscribed apps (read-only) |
 | `WA_APP_ID` | optional: your Meta app id, so `setup_check` confirms that exactly your app is subscribed to the WABA |

@@ -5,11 +5,13 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 ## [Unreleased]
 
 ### Features
+- **Safe second import on the same Meta app** ([docs/META-SETUP.md](docs/META-SETUP.md#a-second-bot-on-the-same-meta-app-never-overwrite-the-first-bots-webhook)): setup reads where Meta routes the number today and never replaces a callback that points to another deployment. A free app gets the app-level callback; an app already serving another bot gets a per-number override (`POST /{phone-number-id}` `webhook_configuration.override_callback_uri`) for this number only. Explicit `replace_webhook` / `--replace-webhook` to replace on purpose; `webhook_scope` (`auto`, `phone`, `waba`, `app`) and `--phone-override` to choose.
 - **Arabic and other-language voice-note replies** ([docs/VOICE-REPLIES.md](docs/VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)), off unless the owner sets `VOICE_REPLY_PROVIDER=xai` (the xAI key already used for calls; `XAI_TTS_VOICE`, `XAI_TTS_ARABIC_LOCALE`) or `=elevenlabs` (`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` default `eleven_v4`, `ELEVENLABS_MAX_CHARS` 600). Voice replies stay off by default. Workers AI languages are unchanged. Every provider error, including quota and rate limits, sends the text instead (`voice_tts_xai_*`, `voice_tts_el_*`); counters in `get_overview`; keys never logged or returned.
 - **Optional dialect presets** for spoken Arabic (`ARABIC_REPLY_DIALECT`: `none` default, `msa`, `lebanese`, `gulf`, `egyptian`): `get_history` returns `voice_reply` (`expected`, `provider`, `max_chars`, `dialect`, `arabic_style`).
 - **Optional pronunciation list** (`VOICE_PRONUNCIATIONS`) and **style tag** (`VOICE_STYLE_TAG`, tag-aware ElevenLabs models), applied to the spoken copy only; the stored reply never changes.
 
 ### Changed
+- **Breaking:** `WA_PHONE_NUMBER_IDS` is required. Empty now answers no number (fail closed) instead of every number on the app; `*` restores "any number" explicitly. The setup route stores the setup number when the list is empty. Existing deployments with an empty list must set it before upgrading.
 - `scripts/hygiene-scan.sh`: ElevenLabs is no longer flagged as an out-of-scope voice provider (it is now an owner-selectable voice-reply provider); a new detector flags `sk_` style API keys, and the log/MCP shape filter redacts them.
 
 ## [0.3.0] - 2026-10-20 (preview)
@@ -22,6 +24,7 @@ Media understanding: customers' voice notes are transcribed and their images des
 - **Optional voice-note replies** ([docs/VOICE-REPLIES.md](docs/VOICE-REPLIES.md)), off by default (`VOICE_REPLIES=off|mirror|on`): `send_reply` can speak the reply with Workers AI `@cf/myshell-ai/melotts` (English, French, Spanish, Chinese, Japanese, Korean; no Arabic), encode it to Ogg Opus in a Durable Object with a bundled WebAssembly encoder (libopus, speexdsp resampler, minimp3; `scripts/build-voice-wasm.sh`), upload it to Meta and send it as a voice note. All `send_reply` guards run first, the text is always stored, any failure sends the text, counters in `get_overview`. Owner-only `POST /api/admin/voice-selftest` (404 unless `MEDIA_SELFTEST=1`); `scripts/smoke.sh` checks that it is off.
 
 ### Changed
+- **Breaking:** `WA_PHONE_NUMBER_IDS` is required. Empty now answers no number (fail closed) instead of every number on the app; `*` restores "any number" explicitly. The setup route stores the setup number when the list is empty. Existing deployments with an empty list must set it before upgrading.
 - `scripts/hygiene-scan.sh` (out-of-scope voice provider check) allows exactly the Workers AI model id `@cf/openai/whisper...`, which runs in your own Cloudflare account; every other mention is still flagged.
 - Worker bundle grows to about 730 KiB (274 KiB gzipped) with the voice-note encoder.
 
