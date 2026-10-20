@@ -4,6 +4,17 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+### Changed
+- **Behaviour change: xAI and ElevenLabs speak every language** ([docs/VOICE-REPLIES.md](docs/VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)). With `VOICE_REPLY_PROVIDER=elevenlabs` or `=xai`, English, French, Spanish, Chinese, Japanese and Korean voice replies are now spoken by that provider too (before: always Workers AI), so one bot has one voice quality in every language. **This uses your ElevenLabs characters or xAI credits for those languages instead of free Workers AI Neurons.** Set `VOICE_REPLY_ROUTING=non-workers-ai` to keep the 0.4.x split. Deployments on the default `workers-ai` provider are not affected. With ElevenLabs, a Workers AI language with no ElevenLabs voice configured stays on Workers AI.
+- **Gender-neutral address**: the Arabic dialect presets address the customer in the plural (إنتو, `-كن` / `-كم` / `-كو` endings) instead of the masculine singular; the `send_reply` tool description and the default call instructions tell the agent not to assume the customer's gender (Arabic plural address; neutral wording in other gendered languages). Owner-written `CALL_INSTRUCTIONS` are unchanged.
+
+### Features
+- **A voice per language** ([docs/VOICE-REPLIES.md](docs/VOICE-REPLIES.md#a-voice-per-language)): `ELEVENLABS_VOICE_IDS` (`ar=<id>,en=<id>` or JSON), with `ELEVENLABS_VOICE_ID` as the fallback; optional `ELEVENLABS_MODEL_IDS` and `VOICE_STYLE_TAGS` per language. Malformed entries are skipped (never fatal), logged as `voice_map_ignored` (counts only) and shown in `get_overview`.
+- `get_overview` → `media`: `voice_routing` (provider per language) and, for ElevenLabs, `voices` (voice id per language, `*` = fallback; never the key), `model_ids`, `style_tag_languages`, `ignored_entries`. The owner voice self-test returns `voice_id`, `voice_from` and `chars_sent`.
+
+### Documentation
+- How to make a restricted ElevenLabs key (Text to Speech + Voices read, credit limit), and that an ElevenLabs plugin sign-in is separate from the Worker key. STATUS.md no longer calls the xAI and ElevenLabs providers unreleased (they shipped in 0.4.0). The hygiene scan comment names xAI as a voice-reply provider.
+
 ## [0.4.1] - 2026-10-21 (preview)
 
 One bot per Meta app by default: a second bot gets its own Meta app in the same business portfolio instead of sharing one with another bot.

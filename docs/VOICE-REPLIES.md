@@ -1,6 +1,6 @@
 # Voice-note replies (optional, off by default)
 
-**Status: released in 0.3.0 (preview); the xAI and ElevenLabs providers, dialect presets and pronunciation list were added in 0.4.0. Off unless the owner sets `VOICE_REPLIES`.** Evidence is listed at the end of this page; read
+**Status: released in 0.3.0 (preview); the xAI and ElevenLabs providers, dialect presets and pronunciation list were added in 0.4.0; every language through xAI or ElevenLabs, a voice per language and gender-neutral presets in 0.5.0. Off unless the owner sets `VOICE_REPLIES`.** Evidence is listed at the end of this page; read
 [STATUS.md](STATUS.md) for the overall picture.
 
 With voice replies on, the agent's text reply can also go out as a **WhatsApp voice note** (the bubble with a play button and waveform),
@@ -41,8 +41,8 @@ Nothing is retried. Audio is never written to storage or logs; only short codes 
 
 **Arabic needs the xAI or ElevenLabs provider:** no Workers AI text-to-speech model speaks Arabic today, so with the default provider
 Arabic replies go as text (`voice_fallback: "voice_language_unsupported_ar"`). Set `VOICE_REPLY_PROVIDER=xai` (your xAI key, the same one
-as voice calls) or `VOICE_REPLY_PROVIDER=elevenlabs` (your own ElevenLabs voice) to speak them ([below](#arabic-and-other-languages-xai-or-elevenlabs)).
-The same holds for any language a model lacks. Sources:
+as voice calls) or `VOICE_REPLY_PROVIDER=elevenlabs` (your own ElevenLabs voices) to speak them, and every other language, with that
+provider ([below](#arabic-and-other-languages-xai-or-elevenlabs)). Sources:
 [melotts](https://developers.cloudflare.com/workers-ai/models/melotts/), [aura-2-en](https://developers.cloudflare.com/workers-ai/models/aura-2-en/),
 [pricing](https://developers.cloudflare.com/workers-ai/platform/pricing/).
 
@@ -52,14 +52,22 @@ is never billed. On Workers Paid, use past the allowance is billed at $0.011 per
 
 ## Arabic and other languages: xAI or ElevenLabs
 
-Optional, for Arabic (and any language the Workers AI model lacks). Off unless the owner sets `VOICE_REPLY_PROVIDER`; voice replies
-themselves still need `VOICE_REPLIES` (`mirror` recommended).
+Optional. Off unless the owner sets `VOICE_REPLY_PROVIDER`; voice replies themselves still need `VOICE_REPLIES` (`mirror` recommended).
+With `xai` or `elevenlabs` set, **every language is spoken by that provider** (both are multilingual), so a customer hears the same
+voice quality, and with ElevenLabs the voice you picked for that language, whatever they write in.
 
-| Language of the reply | Spoken by |
-| --- | --- |
-| Arabic (`ar`, from the Arabic script) | xAI or ElevenLabs, whichever the owner picked |
-| A language the Workers AI model speaks (MeloTTS: `en`, `fr`, `es`, `zh`, `ja`, `ko`) | Workers AI, exactly as before |
-| Any other two-letter language (for example `de`, `it`, `tr`) | xAI or ElevenLabs (both are multilingual) |
+| Language of the reply | `VOICE_REPLY_ROUTING=all` (default) | `VOICE_REPLY_ROUTING=non-workers-ai` (the 0.4.x behaviour) |
+| --- | --- | --- |
+| Arabic (`ar`, from the Arabic script) | xAI or ElevenLabs | xAI or ElevenLabs |
+| A language the Workers AI model speaks (MeloTTS: `en`, `fr`, `es`, `zh`, `ja`, `ko`) | xAI or ElevenLabs | Workers AI |
+| Any other two-letter language (for example `de`, `it`, `tr`) | xAI or ElevenLabs | xAI or ElevenLabs |
+
+**Behaviour change in 0.5.0.** Before 0.5.0 the Workers AI languages always stayed on Workers AI. A deployment that already had
+`VOICE_REPLY_PROVIDER=elevenlabs` (or `xai`) and upgrades now speaks English, French, Spanish, Chinese, Japanese and Korean voice replies
+with that provider too, which uses its characters (ElevenLabs) or credits (xAI) instead of free Workers AI Neurons. To keep the old split,
+set `VOICE_REPLY_ROUTING=non-workers-ai`. With ElevenLabs, a Workers AI language that has no ElevenLabs voice at all (no entry in
+`ELEVENLABS_VOICE_IDS` and no `ELEVENLABS_VOICE_ID`) stays on Workers AI. `get_overview` → `media.voice_routing` shows the provider for each
+language.
 
 ### xAI provider
 
@@ -78,8 +86,9 @@ themselves still need `VOICE_REPLIES` (`mirror` recommended).
 
 ### ElevenLabs provider
 
-- `VOICE_REPLY_PROVIDER=elevenlabs` with `ELEVENLABS_API_KEY` (secret) and `ELEVENLABS_VOICE_ID` (the voice you picked or cloned).
-- **One request per reply:** `POST https://api.elevenlabs.io/v1/text-to-speech/<ELEVENLABS_VOICE_ID>?output_format=opus_48000_64` with
+- `VOICE_REPLY_PROVIDER=elevenlabs` with `ELEVENLABS_API_KEY` (secret) and `ELEVENLABS_VOICE_ID` (the voice you picked or cloned, used for
+  every language), and optionally a voice per language ([below](#a-voice-per-language)).
+- **One request per reply:** `POST https://api.elevenlabs.io/v1/text-to-speech/<voice id>?output_format=opus_48000_64` with
   `{"text": ..., "model_id": ELEVENLABS_MODEL_ID}` and the key in the `xi-api-key` header. The answer is already a mono Ogg Opus file
   (48 kHz, 64 kbit/s), which WhatsApp shows as a voice note, so it is uploaded as `audio/ogg` and sent as `type: "audio"` with `voice: true`
   through the same upload and send code as Workers AI replies. Nothing is decoded or re-encoded, so no Durable Object is involved.
@@ -98,12 +107,46 @@ themselves still need `VOICE_REPLIES` (`mirror` recommended).
   `voice_tts_el_not_ogg_opus`, `voice_tts_el_key_missing`, `voice_tts_el_voice_missing`. Only ElevenLabs' short `detail.status` word is
   read from an error; its message is never echoed or logged.
 - **Key:** `ELEVENLABS_API_KEY` is a Worker secret (stdin only: `wrangler secret put ELEVENLABS_API_KEY < key-file`) or self-provisioned.
-  Give it the smallest scope: Text to Speech, plus Voices read. It goes only to `api.elevenlabs.io`, is never logged, returned or stored by
-  the bridge, and is scrubbed from MCP results.
-- **Cost:** billed to your own ElevenLabs account per character; no Workers AI Neurons are used. `get_overview` → `media` shows
-  `voice_reply_provider`, an `elevenlabs` block (`key_present`, `voice_id_set`, `model_id`, `max_chars`, `style_tag_set`; never the key)
-  and the counters `voice_el_sent`, `voice_el_seconds`, `voice_el_chars` and `voice_el_quota`.
+  It goes only to `api.elevenlabs.io`, is never logged, returned or stored by the bridge, and is scrubbed from MCP results. Make a
+  **restricted key** for the bot ([below](#a-restricted-elevenlabs-key)).
+- **Cost:** billed to your own ElevenLabs account per character (a style tag counts too); no Workers AI Neurons are used. `get_overview` →
+  `media` shows `voice_reply_provider`, `voice_routing`, an `elevenlabs` block (`key_present`, `voice_id_set`, `model_id`, `max_chars`,
+  `style_tag_set`, `voices` (the voice id per language, `*` = the fallback), `model_ids`, `style_tag_languages`, `ignored_entries`; never
+  the key) and the counters `voice_el_sent`, `voice_el_seconds`, `voice_el_chars` and `voice_el_quota`.
 - **Privacy:** the reply text (not the customer's message) is sent to ElevenLabs to be spoken. Check its data policy before you turn this on.
+
+### A voice per language
+
+`ELEVENLABS_VOICE_IDS` gives each language its own ElevenLabs voice, for example an Arabic voice with the accent your customers speak and
+an English voice for English replies. The language is the reply's own (the Arabic script, else `voice_language`, else the language of the
+customer's voice note). A language without an entry uses `ELEVENLABS_VOICE_ID`.
+
+```bash
+ELEVENLABS_VOICE_ID=<fallback voice id>                     # every language without its own voice
+ELEVENLABS_VOICE_IDS='ar=<voice id>,en=<voice id>,fr=<voice id>'
+# or JSON: ELEVENLABS_VOICE_IDS='{"ar":"<voice id>","en":"<voice id>"}'
+ELEVENLABS_MODEL_IDS='ar=eleven_v3'                         # optional: a model per language (ELEVENLABS_MODEL_ID for the rest)
+VOICE_STYLE_TAGS='ar=[warm, slow]; en=[calm, friendly]'     # optional: a style tag per language (; or new lines between entries)
+```
+
+- Pick each voice in the ElevenLabs voice library (in the ElevenLabs app, or through the ElevenLabs plugin of your assistant) by the
+  language and accent you want, then copy its voice id. Voice ids are not secrets; they are plain variables.
+- Keys are two-letter language codes (`ar`, `en`, `fr`, ...); values are voice ids (letters and digits), model ids (`eleven_v4`) or style
+  tags. Entries are separated by commas, semicolons or new lines (style tags: semicolons or new lines, since a tag may contain commas).
+- A malformed entry (a bad language code or id, broken JSON) is skipped and never stops voice replies: the language falls back to the
+  single setting. The skipped count is logged as `voice_map_ignored` (counts only, never the value) and shown in `get_overview` →
+  `media.elevenlabs.ignored_entries`.
+- The owner self-test (below) returns `voice_id`, `voice_from` (`language` or `default`) and `chars_sent` for an ElevenLabs reply.
+
+### A restricted ElevenLabs key
+
+Make a key just for the bot in the ElevenLabs app (**Developers** in the left sidebar → **API Keys** → create a key). Keep **Restrict Key**
+on (the default), enable only **Text to Speech** and **Voices** (read), and set a **credit limit** (a monthly cap you can afford). Then the
+key can only speak with your voices; it cannot change voices, agents or your account, and a leak or a loop costs at most the limit
+(ElevenLabs' [key guide](https://elevenlabs.io/blog/api-authentication-and-key-management)). Store it with
+`wrangler secret put ELEVENLABS_API_KEY` (stdin only). Signing in to ElevenLabs in your assistant's plugin (to browse the voice library and
+choose voices) is **separate** from this Worker key: the plugin sign-in never reaches the Worker, and the Worker key is never given to the
+plugin or the agent.
 
 ## Arabic dialect presets
 
@@ -120,8 +163,11 @@ how to write a spoken Arabic reply. The `send_reply` tool description tells the 
 | `gulf` | Natural Gulf (Khaleeji) Arabic |
 | `egyptian` | Natural Egyptian Arabic |
 
-Every preset also asks for a short, natural reply with no lists, links, emojis, markdown or brackets, and numbers as spoken words. Typed
-replies are not affected. The hint is advice to the agent; the bridge does not rewrite the stored text. The preset texts live in
+Every preset addresses the customer **without assuming their gender**: in the plural (إنتو with `-كن` endings in Lebanese, `-كم` in Gulf
+and Modern Standard Arabic, `-كو` in Egyptian), never a masculine or feminine singular. Every preset also asks for a short, natural reply
+with no lists, links, emojis, markdown or brackets, and numbers as spoken words. Typed replies are not affected by the preset, but the
+`send_reply` tool description gives the agent the same gender-neutral rule for every reply (Arabic plural address; neutral wording in
+other gendered languages), and so do the default call instructions ([VOICE-CALLS.md](VOICE-CALLS.md)). The hint is advice to the agent; the bridge does not rewrite the stored text. The preset texts live in
 [lib/voice-style.ts](../lib/voice-style.ts); with xAI the preset also picks the Arabic locale.
 
 ## Pronunciation list
@@ -159,14 +205,18 @@ The reply text that is stored, shown in history and sent as a text fallback is n
 | `VOICE_MAX_CHARS` | 400 (20 to 1500) | Longer replies go as text |
 | `VOICE_MAX_SECONDS` | 45 (5 to 120) | Longer audio goes as text; WhatsApp shows the play button only up to 512 KB |
 | `VOICE_TIMEOUT_MS` | 15000 (2000 to 20000) | Text-to-speech timeout |
-| `VOICE_REPLY_PROVIDER` | `workers-ai` | `xai` or `elevenlabs`: Arabic and languages Workers AI lacks are spoken by that provider ([above](#arabic-and-other-languages-xai-or-elevenlabs)) |
+| `VOICE_REPLY_PROVIDER` | `workers-ai` | `xai` or `elevenlabs`: that provider speaks every language ([above](#arabic-and-other-languages-xai-or-elevenlabs)) |
+| `VOICE_REPLY_ROUTING` | `all` | With `xai` / `elevenlabs`: `all` languages, or `non-workers-ai` to keep Workers AI for its own languages (the 0.4.x behaviour) |
 | `XAI_TTS_VOICE` | `eve` | xAI voice: a built-in name or your custom voice id (uses `XAI_API_KEY`) |
 | `XAI_TTS_ARABIC_LOCALE` | (from the preset) | `ar-EG`, `ar-SA` or `ar-AE` |
 | `ELEVENLABS_API_KEY` | (secret, unset) | ElevenLabs key (Text to Speech, plus Voices read); stdin only |
-| `ELEVENLABS_VOICE_ID` | (unset) | The ElevenLabs voice to speak with |
+| `ELEVENLABS_VOICE_ID` | (unset) | The ElevenLabs voice to speak with; the fallback for every language without its own voice |
+| `ELEVENLABS_VOICE_IDS` | (unset) | Optional voice per language, e.g. `ar=<id>,en=<id>` or JSON ([above](#a-voice-per-language)) |
+| `ELEVENLABS_MODEL_IDS` | (unset) | Optional model per language, e.g. `ar=eleven_v3` |
 | `ELEVENLABS_MODEL_ID` | `eleven_v4` | ElevenLabs model (`eleven_v3` also works) |
 | `ELEVENLABS_MAX_CHARS` | 600 (20 to 1500) | Longer replies go as text, with no ElevenLabs call |
 | `VOICE_STYLE_TAG` | (unset) | Optional direction for tag-aware ElevenLabs models, e.g. `warm, friendly` |
+| `VOICE_STYLE_TAGS` | (unset) | Optional style tag per language, e.g. `ar=[warm]; en=[calm]` |
 | `VOICE_PRONUNCIATIONS` | (unset) | Optional `written => spoken` list for the spoken copy ([above](#pronunciation-list)) |
 | `ARABIC_REPLY_DIALECT` | `none` | Optional preset: `msa`, `lebanese`, `gulf` or `egyptian` ([above](#arabic-dialect-presets)) |
 
@@ -226,5 +276,8 @@ self-test conversation that is erased afterwards. Remove `MEDIA_SELFTEST` when d
 - **xAI and ElevenLabs providers**: tested locally in `tests/voice-providers.test.ts` (provider choice, each request, error and quota codes,
   the text fallback, caps, counters, the dialect presets, the pronunciation list on the spoken copy only, the keys never in logs or results).
   ElevenLabs was run on a test Worker on 2026-10-20 (see [STATUS.md](STATUS.md)). xAI text-to-speech is tested locally only (it is paid).
+- **Routing and a voice per language (0.5.0)**: tested locally in `tests/voice-routing.test.ts` (routing default and opt-out, the per-language
+  voice, model and tag with fallbacks, malformed entries skipped and counted, `get_overview`, gender-neutral guidance). Run on a test Worker
+  on 2026-10-21: see [STATUS.md](STATUS.md).
 - **Not yet verified**: the bubble on the phone (whether it plays as a voice note) and the delivery status. The test Worker cannot receive
   Meta's signed status webhooks until its app secret is set.

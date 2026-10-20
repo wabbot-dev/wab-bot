@@ -146,7 +146,7 @@ Worker variables; defaults apply to anything left unset (full list in [CONFIGURA
 | `CALL_TRANSCRIPT_RETENTION_DAYS` | 30 | 1 to 365. Transcripts expire by themselves after this many days; the metadata log keeps 90 days |
 | `CALL_VOICE` | `eve` | Any xAI built-in voice id |
 | `CALL_LANGUAGE_HINT` | `auto` | A language code from the list below; unrecognised codes are silently ignored by xAI. Spanish and Portuguese need a regional code (`es-MX`, `pt-BR`) |
-| `CALL_BUSINESS_NAME`, `CALL_GREETING`, `CALL_INSTRUCTIONS` | generic | Your own wording |
+| `CALL_BUSINESS_NAME`, `CALL_GREETING`, `CALL_INSTRUCTIONS` | generic | Your own wording. The default instructions tell the agent to address the caller without assuming their gender (Arabic plural address, neutral wording in other gendered languages); your own `CALL_INSTRUCTIONS` replace them as written, so add that line yourself if you want it |
 | `CALL_ALLOWED_CALLERS` | none | Digits, comma separated. Required in test mode; an optional filter in live mode |
 | `CALL_SIP_TARGET` | `xai` | Which voice agent answers. `xai` (default): the built-in xAI agent described on this page. `host[:port]` (for example `sip.your-voice-agent.example:5061`): arming points Meta's SIP calls at that SIP voice agent instead, skips the xAI registration (no xAI key needed), and still switches calling off when the window ends. See *Another voice agent* below |
 

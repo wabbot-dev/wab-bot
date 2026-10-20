@@ -1,6 +1,7 @@
 /**
  * ElevenLabs text-to-speech for optional voice-note replies (docs/VOICE-REPLIES.md#elevenlabs-provider). Used when the owner sets
- * VOICE_REPLY_PROVIDER=elevenlabs: Arabic replies always, and any other language that the Workers AI model cannot speak.
+ * VOICE_REPLY_PROVIDER=elevenlabs: every language by default (VOICE_REPLY_ROUTING=all), with the voice, model and style tag picked per
+ * language in lib/voice-reply.ts (ELEVENLABS_VOICE_IDS, ELEVENLABS_MODEL_IDS, VOICE_STYLE_TAGS; ELEVENLABS_VOICE_ID as the fallback).
  *
  * One POST per reply to api.elevenlabs.io with output_format=opus_48000_64: the answer is already a mono Ogg Opus file (48 kHz), which
  * WhatsApp shows as a voice note, so nothing is decoded or re-encoded and the call runs in the request itself (network wait, not CPU).
@@ -9,7 +10,8 @@
  *
  * The request carries only text and model_id, like the ElevenLabs studio does: no voice_settings (the voice's own saved settings
  * apply) and no language_code (forcing "ar" pushed a dialect voice toward standard Arabic in a 2026-10-20 A/B run). With the owner's
- * VOICE_STYLE_TAG set, a tag-aware model (eleven_v3/v4) gets that one inline direction in front of the text (lib/voice-style.ts).
+ * VOICE_STYLE_TAG (or that language's VOICE_STYLE_TAGS entry) set, a tag-aware model (eleven_v3/v4) gets that one inline direction in
+ * front of the text (lib/voice-style.ts).
  */
 import { oggOpusSeconds, type MediaCounts } from "./media";
 import { isMonoOggOpus, speakable, type SpeakResult } from "./voice-reply";
@@ -58,6 +60,7 @@ export async function speakElevenLabs(fetcher: typeof fetch, a: ElevenLabsArgs):
   const spoken = stripAudioTags(speakable(a.text));
   if (!spoken) return { ok: false, code: "voice_empty_text", count: {} };
   if (spoken.length > a.maxChars) return { ok: false, code: "voice_too_long", count: {} };
+  const sent = a.accentTag ? `${a.accentTag} ${spoken}` : spoken;
   const url = `${ELEVENLABS_HOST}/v1/text-to-speech/${encodeURIComponent(a.voiceId)}?output_format=${ELEVENLABS_OUTPUT_FORMAT}`;
   const ac = new AbortController();
   const timer = setTimeout(() => ac.abort(), a.timeoutMs);
@@ -67,7 +70,7 @@ export async function speakElevenLabs(fetcher: typeof fetch, a: ElevenLabsArgs):
     res = await fetcher(url, {
       method: "POST",
       headers: { "xi-api-key": a.apiKey, "content-type": "application/json", accept: "audio/ogg" },
-      body: JSON.stringify({ text: a.accentTag ? `${a.accentTag} ${spoken}` : spoken, model_id: a.modelId }),
+      body: JSON.stringify({ text: sent, model_id: a.modelId }),
       signal: ac.signal,
     });
     if (!res.ok) {
@@ -86,5 +89,5 @@ export async function speakElevenLabs(fetcher: typeof fetch, a: ElevenLabsArgs):
   if (!isMonoOggOpus(audio)) return fail("voice_tts_el_not_ogg_opus");
   const seconds = oggOpusSeconds(audio) ?? 0;
   if (seconds > a.maxSeconds) return { ok: false, code: "voice_too_long", count: {} };
-  return { ok: true, ogg: audio, seconds, ttsBytes: audio.length, provider: "elevenlabs" };
+  return { ok: true, ogg: audio, seconds, ttsBytes: audio.length, provider: "elevenlabs", chars: sent.length };
 }

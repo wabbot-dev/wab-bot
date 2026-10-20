@@ -5,6 +5,7 @@ import { scrub } from "./admin-mcp";
 import { getOverview, type SecretsInfo } from "./overview";
 import { InvalidParams, serveJsonRpc, type Args, type ToolMeta } from "./mcp-rpc";
 import type { ReplyAs } from "./voice-reply";
+import { NEUTRAL_ADDRESS } from "./voice-style";
 import {
   claimConversation, escalateConversation, finishConversation, getControls, getHistory, listPending,
   releaseConversation, reportPaymentTool, sendReply, startConversation, submitRequestTool,
@@ -107,9 +108,10 @@ const TOOLS: Tool[] = [
     description:
       "Send a reply to the customer of this conversation (recipient is fixed by the server; there is no 'to'). Provide text OR template_name. All safety guards are enforced server-side. " +
       "Voice notes (only if the owner turned VOICE_REPLIES on): reply_as \"auto\" (default) speaks the text when the customer's latest message was a voice note, \"voice\" asks for it (mode `on` only), \"text\" never speaks. " +
-      "The text is always stored; if speaking fails, the text is too long, or the language has no voice (Arabic without VOICE_REPLY_PROVIDER xai or elevenlabs, for example) the text is sent instead and the result says sent_as \"text\" with voice_fallback. " +
+      "The text is always stored; if speaking fails, the text is too long, or the language has no voice (Arabic with the default Workers AI provider, for example) the text is sent instead and the result says sent_as \"text\" with voice_fallback. " +
       "Rich replies (docs/OUTBOUND.md): add ONE of media (a document or image by https url or media id; text is the caption), buttons (up to 3 quick choices) or list (a menu of up to 10 rows) to the text; with a template, template_header and template_buttons fill its header and dynamic buttons. A tapped button or row comes back as a customer message with its title. " +
-      "When get_history returns voice_reply.expected true, your text will be SPOKEN: keep it short (under voice_reply.max_chars), no links, lists or emojis, and if it is Arabic and voice_reply.arabic_style is present, follow it (the owner's chosen dialect preset).",
+      "When get_history returns voice_reply.expected true, your text will be SPOKEN: keep it short (under voice_reply.max_chars), no links, lists or emojis, and if it is Arabic and voice_reply.arabic_style is present, follow it (the owner's chosen dialect preset). " +
+      NEUTRAL_ADDRESS,
     inputSchema: obj(
       {
         conversation_id: convSchema,

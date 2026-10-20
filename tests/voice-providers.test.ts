@@ -85,15 +85,19 @@ test("pronunciation list: JSON or pairs, malformed entries skipped, whole words 
   assert.equal(spokenCopy("هلّق", { lang: "ar", dialect: "lebanese" }).changes, 0, "idempotent");
 });
 
-test("provider choice: Arabic and languages Workers AI lacks go to ElevenLabs; the existing Workers AI languages stay", () => {
+test("provider choice: ElevenLabs speaks every language by default; VOICE_REPLY_ROUTING=non-workers-ai keeps the 0.4.x split", () => {
   const wa = loadConfig(baseEnv());
   assert.equal(ttsProviderFor(wa, "ar"), null, "no Arabic without ElevenLabs");
   assert.equal(ttsProviderFor(wa, "en"), "workers-ai");
   const el = loadConfig(baseEnv(EL_ENV));
   assert.equal(ttsProviderFor(el, "ar"), "elevenlabs");
   assert.equal(ttsProviderFor(el, "de"), "elevenlabs", "MeloTTS has no German");
-  for (const l of ["en", "fr", "es", "zh", "ja", "ko"]) assert.equal(ttsProviderFor(el, l), "workers-ai", l);
+  for (const l of ["en", "fr", "es", "zh", "ja", "ko"]) assert.equal(ttsProviderFor(el, l), "elevenlabs", l);
   assert.deepEqual(voiceLanguagesOf(el), ["ar", "en", "fr", "es", "zh", "ja", "ko", "*"]);
+  const old = loadConfig(baseEnv({ ...EL_ENV, VOICE_REPLY_ROUTING: "non-workers-ai" }));
+  assert.equal(ttsProviderFor(old, "ar"), "elevenlabs");
+  assert.equal(ttsProviderFor(old, "de"), "elevenlabs");
+  for (const l of ["en", "fr", "es", "zh", "ja", "ko"]) assert.equal(ttsProviderFor(old, l), "workers-ai", l);
 });
 
 function fakeEl(answer: (url: string, init: RequestInit) => Response | Promise<Response>) {
@@ -205,7 +209,10 @@ test("mirror + elevenlabs: an Arabic reply to a voice note goes out as an Eleven
   assert.equal(m?.today.voice_el_chars, AR.length);
   const ov: any = await getOverview(h.ctx, null);
   assert.equal(ov.media.voice_reply_provider, "elevenlabs");
-  assert.deepEqual(ov.media.elevenlabs, { key_present: true, voice_id_set: true, model_id: "eleven_v4", max_chars: 600, style_tag_set: false });
+  assert.deepEqual(ov.media.elevenlabs, {
+    key_present: true, voice_id_set: true, model_id: "eleven_v4", max_chars: 600, style_tag_set: false,
+    voices: { "*": VOICE }, model_ids: {}, style_tag_languages: [], ignored_entries: { voice_ids: 0, model_ids: 0, style_tags: 0 },
+  });
   assert.ok(h.logs.some((l) => l.event === "voice_prepared" && l.fields?.provider === "elevenlabs"));
   assert.ok(!JSON.stringify(h.logs).includes(KEY), "the key is never in a log line");
   assert.ok(!JSON.stringify(ov).includes(KEY), "nor in the overview");
@@ -240,7 +247,7 @@ test("ElevenLabs quota or error, or a reply over the cap: the TEXT goes instead,
   }
 });
 
-test("off by default even with an ElevenLabs key: no hint, no call; English stays on Workers AI with the provider set", async () => {
+test("off by default even with an ElevenLabs key: no hint, no call; English stays on Workers AI with routing non-workers-ai", async () => {
   const { h, elCalls } = elHarness({ VOICE_REPLIES: "off" });
   await activate(h);
   await post(h, voiceNoteIn("wamid.IN1"));
@@ -250,14 +257,14 @@ test("off by default even with an ElevenLabs key: no hint, no call; English stay
   const r: any = await sendReply(h.ctx, { conversation_id: cid(), lease: c.lease, text: AR });
   assert.equal(r.sent_as, "text");
   assert.equal(elCalls.length, 0);
-  const e = elHarness();
+  const e = elHarness({ VOICE_REPLY_ROUTING: "non-workers-ai" });
   await activate(e.h);
   await post(e.h, voiceNoteIn("wamid.IN2"));
   const c2: any = await claimConversation(e.h.ctx, cid());
   await getHistory(e.h.ctx, cid(), c2.lease);
   const r2: any = await sendReply(e.h.ctx, { conversation_id: cid(), lease: c2.lease, text: "Your appointment is booked for ten.", voice_language: "en" });
   assert.equal(r2.sent_as, "voice");
-  assert.equal(e.elCalls.length, 0, "English: the existing Workers AI path");
+  assert.equal(e.elCalls.length, 0, "English: the Workers AI path (0.4.x routing)");
   assert.equal(e.spokenByWorkersAi.length, 1);
 });
 
@@ -351,13 +358,14 @@ test("speakXai: errors become short codes; no key or over the cap makes no call;
   assert.equal(calls.length, 0);
 });
 
-test("provider xai: Arabic goes to the Durable Object speaker with the xAI request (no key in the call); English stays on Workers AI", async () => {
-  const h = makeHarness({ VOICE_REPLIES: "mirror", VOICE_REPLY_PROVIDER: "xai", XAI_API_KEY: XKEY, ARABIC_REPLY_DIALECT: "egyptian", VOICE_PRONUNCIATIONS: "Acme=Akmee" });
+test("provider xai: Arabic goes to the Durable Object speaker with the xAI request (no key in the call); English too by default, Workers AI with non-workers-ai", async () => {
+  const h = makeHarness({ VOICE_REPLIES: "mirror", VOICE_REPLY_PROVIDER: "xai", XAI_API_KEY: XKEY, ARABIC_REPLY_DIALECT: "egyptian", VOICE_PRONUNCIATIONS: "Acme=Akmee", VOICE_REPLY_ROUTING: "non-workers-ai" });
   const seen: SpeakArgs[] = [];
   h.ctx.speakVoice = async (a) => { seen.push(a); return { ok: true, ogg: OGG, seconds: 2, ttsBytes: 1000, provider: a.xai ? "xai" : "workers-ai" }; };
   const cfg = loadConfig(baseEnv({ VOICE_REPLY_PROVIDER: "xai" }));
   assert.equal(ttsProviderFor(cfg, "ar"), "xai");
-  assert.equal(ttsProviderFor(cfg, "en"), "workers-ai");
+  assert.equal(ttsProviderFor(cfg, "en"), "xai", "every language by default");
+  assert.equal(ttsProviderFor(loadConfig(baseEnv({ VOICE_REPLY_PROVIDER: "xai", VOICE_REPLY_ROUTING: "non-workers-ai" })), "en"), "workers-ai");
   const r = await synthesize(h.ctx, AR, "ar");
   assert.equal(r.ok, true);
   assert.equal(seen.length, 1);

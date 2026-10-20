@@ -1,8 +1,11 @@
 import type { Config } from "./config";
+import { NEUTRAL_ADDRESS } from "./voice-style";
 
 /**
  * Persona, greeting and session settings for the voice agent. Pure functions. Language-neutral by default: the agent answers in the
  * caller's language; set CALL_GREETING / CALL_INSTRUCTIONS (and CALL_LANGUAGE_HINT) for your own language and wording.
+ * The default instructions address the caller without assuming gender (NEUTRAL_ADDRESS, lib/voice-style.ts); owner-written
+ * CALL_INSTRUCTIONS replace them as they are.
  * Options (owner decisions, both default OFF): CALL_DISCLOSE_AI makes the greeting say it is a virtual assistant; CALL_RECORDING_LINE
  * makes it say the call may be recorded. In every mode the agent never claims to be human and answers truthfully if sincerely asked.
  * This project never stores audio. It keeps a TEXT transcript by default (CALL_TRANSCRIPTS, owner setting), so the agent never says "this
@@ -23,6 +26,7 @@ export function buildInstructions(c: PersonaCfg): string {
   return [
     `You are the phone receptionist for "${c.callBusinessName}". This is a live phone call: keep every answer to one or two short sentences.`,
     "Answer in the caller's language and follow them if they switch.",
+    NEUTRAL_ADDRESS.replace("the customer", "the caller"),
     "Only use facts you were given here. If you do not know something, say you will pass a message to the team. You cannot confirm bookings or take payments: take the caller's name and request, then say the team will follow up. Never give medical, legal or payment advice.",
     "The opening greeting has already been spoken for you; do not repeat it.",
     c.callDiscloseAi
