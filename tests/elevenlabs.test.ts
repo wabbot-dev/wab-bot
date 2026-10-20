@@ -268,18 +268,21 @@ test("pronunciation layer: clitics and every ساعة form; no false matches; am
   assert.equal(t("Hello الساعة 8"), "Hello السيعة 8");
 });
 
-test("pronunciation layer: imala respellings (Beiruti e) for the Nick voice, with clitics; emphatic/guttural words and look-alikes untouched", () => {
-  const t = (s: string) => lebaneseSpoken(s, { voiceId: "VsqtGXzc5Y1q5G3RuCrZ" }).text;
-  assert.equal(t("وعن الدوام، نحنا فاتحين"), "وعن الدويم، نحنا فيتحين");
+test("pronunciation layer: imala respellings (a short Beiruti e) for the Nick voice, with clitics; the rest untouched", () => {
+  const nick = { voiceId: "VsqtGXzc5Y1q5G3RuCrZ" };
+  const t = (s: string) => lebaneseSpoken(s, nick).text;
+  assert.equal(t("وعن الدوام، نحنا فاتحين من الساعة اتنعش"), "وعن الدوِم، نحنا فِتحين من السَيْعة اتنعش");
+  assert.equal(t("عالساعة عشرة، نصّ ساعة"), "عالسَيْعة عشرة، نصّ سَيْعة", "Nick: سَيْعة, not السيعة (said see3a)");
   assert.equal(t("مش لازم، ولازم تجرّب"), "مش ليزم، وليزم تجرّب");
-  assert.equal(t("بزبّطلك ياها، وبحضّرلك ياه"), "بزبّطلك ييها، وبحضّرلك ييه");
-  assert.equal(t("كرسي للولاد، فوق التلاتين، التوصيل ببلاش، شي تاني، حدّ الشبّاك"),
-    "كرسي للوليد، فوق التليتين، التوصيل ببلَيْش، شي تِني، حدّ الشبّيك");
-  assert.equal(t("حد الشباك"), "حد الشبّيك", "bare spelling too");
-  assert.equal(t("طاولة شغّال عايشة رسالة بياخد تمانة منستنّاك أولاد الدوامات"), "طاولة شغّال عايشة رسالة بياخد تمانة منستنّاك أولاد الدوامات");
-  const once = t("الدوام فاتحين لازم ياها ياه للولاد التلاتين ببلاش تاني الشبّاك");
-  assert.equal(lebaneseSpoken(once, { voiceId: "VsqtGXzc5Y1q5G3RuCrZ" }).changes, 0, "idempotent");
-  // the approved Mimi voice already says these with "e": no imala respellings (se3a still applies)
+  assert.equal(t("بزبّطلك ياها، التوصيل ببلاش، شي تاني"), "بزبّطلك يَها، التوصيل ببلَيْش، شي تِني");
+  // left as written for Nick: every respelling tried overshot to "ii", or the voice already says "e"
+  assert.equal(t("حدّ الشبّاك، وبحضّرلك ياه، كرسي للولاد، فوق التلاتين، تمانة، منستنّاك"),
+    "حدّ الشبّاك، وبحضّرلك ياه، كرسي للولاد، فوق التلاتين، تمانة، منستنّاك");
+  assert.equal(t("حد الشباك"), "حد الشبّاك", "the approved shadda still applies");
+  assert.equal(t("طاولة شغّال عايشة رسالة بياخد أولاد الدوامات"), "طاولة شغّال عايشة رسالة بياخد أولاد الدوامات");
+  const once = t("الدوام فاتحين لازم ياها ببلاش تاني الساعة ساعة");
+  assert.equal(lebaneseSpoken(once, nick).changes, 0, "idempotent");
+  // the approved Mimi voice already says these with "e": no imala respellings, and it keeps السيعة
   const mimi = "وعن الدوام، نحنا فاتحين من الساعة اتنعش، مش لازم";
   assert.equal(lebaneseSpoken(mimi, { voiceId: "NQyF5U0t336unYhQXcuv" }).text, "وعن الدوام، نحنا فاتحين من السيعة اتنعش، مش لازم");
   assert.equal(lebaneseSpoken(mimi).text, lebaneseSpoken(mimi, { voiceId: "NQyF5U0t336unYhQXcuv" }).text, "no voice: same as Mimi");

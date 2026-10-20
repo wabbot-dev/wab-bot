@@ -9,17 +9,21 @@
  *    - الساعة / ساعة → السيعة / سيعة: Beiruti "se3a" (imala), not "sa3a" (A/B 2026-10-20: the vowel after the s moved from
  *      F1 ≈ 790 Hz to ≈ 610 Hz with F2 ≈ 2400 Hz, an "e"; the transcript read it back as السيعة).
  *    - كرمالك → كرميلك (said "kirmelak"), the approved script's own spelling.
- *    - Imala (Beiruti ā → e after plain consonants), A/B-tested on the Nick voice (VsqtGXzc5Y1q5G3RuCrZ, eleven_v4, 2026-10-20) with
- *      short clips, a formant check (F1/F2 of the vowel) and a Whisper read-back; the bare spelling was said with a plain "a"
- *      (F1 ≈ 600-700 Hz, F2 ≈ 1300-1600 Hz). Chosen spellings and their vowel:
- *        دوام → دويم ("dawem"; read back الدويم), فاتحين → فيتحين ("fet7in"; F1 ≈ 520, F2 ≈ 1750-2000),
- *        لازم → ليزم ("lezem"; F1 ≈ 490, F2 ≈ 1830), ياها / ياه → ييها / ييه ("yeha", "yeh"; F1 ≈ 450-510, F2 ≈ 1800-2050),
- *        ولاد → وليد ("wled"), تلاتين → تليتين ("tletin"; F1 ≈ 380, F2 ≈ 1950), بلاش → بلَيْش ("blesh"; F1 ≈ 450, F2 ≈ 1950;
- *        plain بليش overshot to "ii"), تاني → تِني ("tene"; F1 ≈ 425, F2 ≈ 1890; تيني overshot to "tiini"),
- *        شبّاك → شبّيك ("shebbek"; the voice leans to "ii" here, still nearer than "a").
- *      Left as written because the voice already says e: تمانة (F1 ≈ 540, F2 ≈ 1860), منستنّاك (read back نستنيك).
+ *    - Imala (Beiruti ā → a short or mid "e", never a long "ii"), for the Nick voice only (VsqtGXzc5Y1q5G3RuCrZ, eleven_v4).
+ *      Round 2 (2026-10-20, after the owner heard "see3a" and "shebbiik"): short clips with character timestamps, every 5 ms of the
+ *      vowel classed from F1/F2 as "ii" (F1 < 420 Hz, F2 > 1950 Hz), "e" (F1 420-610, F2 > 1700) or "a", and the longest run of each
+ *      measured; a respelling that gives a long "ii" run fails, and "a" is preferred to "ii". Kept (2-6 takes each, no long "ii"):
+ *        ساعة → سَيْعة (so الساعة → السَيْعة; "se3a": an "e" of 50-85 ms in 4 of 6 takes, otherwise "a"; السيعة and السَيعة
+ *          start with 25-70 ms of "ii", the "see3a" the owner heard), دوام → دوِم ("dawem"; "e" 45-85 ms; دويم was "ii"),
+ *        فاتحين → فِتحين ("fet7in"; "e" 80-90 ms; فيتحين was "ii" 95 ms), لازم → ليزم ("lezem"; "e" 75 ms, no "ii"),
+ *        ياها → يَها ("yeha"; "e" 50-90 ms; ييها was "ii" 110 ms), بلاش → بلَيْش ("blesh"; "e" 65-75 ms),
+ *        تاني → تِني ("tene"; a short "e" 20-35 ms; تيني was "ii").
+ *      Left as written (no form reached a short "e" without "ii", or the voice already says "e"): شبّاك (شبّيك / شبَّيْك / شبَّيك
+ *      were "ii" 65-150 ms, شِبّاك / شبَّاك stay "a", شبّك / شبِّك a short schwa), ياه (يَه / ييه start with 55-135 ms of "ii"),
+ *      ولاد (وليد and وَلَيْد were "ii"; the bare spelling is already near "e"), تلاتين (تليتين was "ii" 125-150 ms; the bare
+ *      spelling already gives "e"), تمانة and منستنّاك (already "e").
  *      Not respelled: ā next to emphatic, guttural or r consonants, where Beiruti keeps "a" (طاولة، شغّال، عايشة، رسالة، بياخد).
- *      Applied only for the voices in IMALA_VOICES: the approved Mimi voice already says these with "e" and the respellings made it "ii".
+ *      The approved Mimi voice already says these words with "e" and keeps السيعة; it gets none of this.
  * Words are matched whole, with the common clitics in front (و ف ب ل ع ك ال لل عال بال), ignoring any vowel marks already present.
  */
 
@@ -49,18 +53,17 @@ export const RESPELL: Record<string, string> = {
  *  (F2 ≈ 2800-3000 Hz), so it is not listed. */
 export const IMALA_VOICES: readonly string[] = ["VsqtGXzc5Y1q5G3RuCrZ"]; // Nick
 
-/** Imala respellings (see the header), for IMALA_VOICES only. Keys are bare stems; values replace them, clitics kept. */
+/** Imala respellings (see the header), for IMALA_VOICES only; they run before RESPELL. Keys are bare stems; values replace them,
+ *  clitics kept. */
 export const IMALA_RESPELL: Record<string, string> = {
-  "دوام": "دويم",
-  "فاتحين": "فيتحين",
+  "ساعة": "سَيْعة", // overrides RESPELL's سيعة for these voices (said "see3a")
+  "ساعه": "سَيْعة",
+  "دوام": "دوِم",
+  "فاتحين": "فِتحين",
   "لازم": "ليزم",
-  "ياها": "ييها",
-  "ياه": "ييه",
-  "ولاد": "وليد",
-  "تلاتين": "تليتين",
+  "ياها": "يَها",
   "بلاش": "بلَيْش",
   "تاني": "تِني",
-  "شباك": "شبّيك",
 };
 
 type Rule = { re: RegExp; to: string };
