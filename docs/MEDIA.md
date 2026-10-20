@@ -1,6 +1,6 @@
 # Voice notes, images, documents and other inbound types (Workers AI)
 
-**Status: released in 0.3.0 (preview).** Evidence is listed at the end of this page; read [STATUS.md](STATUS.md) for the overall picture.
+**Status: released in 0.3.0 (preview); documents, locations, contact cards and stickers added in 0.4.0.** Evidence is listed at the end of this page; read [STATUS.md](STATUS.md) for the overall picture.
 
 When a customer sends a **voice note** (or another audio file) or an **image**, the bridge turns it into text with
 [Cloudflare Workers AI](https://developers.cloudflare.com/workers-ai/) in **your own Cloudflare account** and stores that text on the

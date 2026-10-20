@@ -17,9 +17,9 @@ This page lists what is deliberately not in v0.1.0 and what is planned. Nothing 
 | Run the interactive `wrangler login --device` deploy path live | Open | The script ran live once with an API token; the device login and hidden prompts did not |
 | Retention pass over more than 100 conversations per run | Open | Known limitation |
 | Voice notes and images | Built (0.3.0) | Transcribed / described with Workers AI, raw media never stored ([MEDIA.md](MEDIA.md)) |
-| Documents, locations, contact cards, stickers | Built (unreleased) | PDF, Office, CSV and text documents read with Workers AI Markdown conversion; locations, contact cards and stickers become text ([MEDIA.md](MEDIA.md)) |
+| Documents, locations, contact cards, stickers | Built (0.4.0) | PDF, Office, CSV and text documents read with Workers AI Markdown conversion; locations, contact cards and stickers become text ([MEDIA.md](MEDIA.md)) |
 | Video | Not planned | Noted with its caption; the agent asks the customer to describe it if it matters |
-| Voice-note replies (synthesized voice notes) | Built (0.3.0), off by default | Workers AI text-to-speech plus an in-Worker Ogg Opus encoder. Arabic and other languages through an optional xAI or ElevenLabs provider with optional dialect presets (unreleased, [VOICE-REPLIES.md](VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)) |
-| Business mode, alerts, rich replies, payments, bookings hook | Built (unreleased), all optional | [BUSINESS-MODE.md](BUSINESS-MODE.md), [ALERTS.md](ALERTS.md), [OUTBOUND.md](OUTBOUND.md); tested locally |
+| Voice-note replies (synthesized voice notes) | Built (0.3.0), off by default | Workers AI text-to-speech plus an in-Worker Ogg Opus encoder. Arabic and other languages through an optional xAI or ElevenLabs provider with optional dialect presets (0.4.0, [VOICE-REPLIES.md](VOICE-REPLIES.md#arabic-and-other-languages-xai-or-elevenlabs)) |
+| Business mode, alerts, rich replies, payments, bookings hook | Built (0.4.0), all optional | [BUSINESS-MODE.md](BUSINESS-MODE.md), [ALERTS.md](ALERTS.md), [OUTBOUND.md](OUTBOUND.md); tested locally |
 
 Want something here sooner, or something that is not listed? Open a [design discussion](https://github.com/wabbot-dev/wab-bot/issues/new?template=design_discussion.yml) or a feature request, starting from the problem. Read the [contribution scope](../CONTRIBUTING.md#contribution-scope) first.

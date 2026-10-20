@@ -1,6 +1,6 @@
 # Voice-note replies (optional, off by default)
 
-**Status: released in 0.3.0 (preview), off unless the owner sets `VOICE_REPLIES`.** Evidence is listed at the end of this page; read
+**Status: released in 0.3.0 (preview); the xAI and ElevenLabs providers, dialect presets and pronunciation list were added in 0.4.0. Off unless the owner sets `VOICE_REPLIES`.** Evidence is listed at the end of this page; read
 [STATUS.md](STATUS.md) for the overall picture.
 
 With voice replies on, the agent's text reply can also go out as a **WhatsApp voice note** (the bubble with a play button and waveform),

@@ -4,6 +4,10 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-20 (preview)
+
+Template-ready bridge: one generic template for consumer bots, business (trade) bots or both, and safe to run a second bot next to an existing one. Adds business mode with an owner-managed directory, staff-verified payments, a bookings/orders hook, instant alerts, rich replies, inbound documents, locations and contact cards, Arabic and other-language voice replies through xAI or ElevenLabs, and per-number webhook routing. Breaking: `WA_PHONE_NUMBER_IDS` is now required (see Changed).
+
 ### Features
 - **Safe second import on the same Meta app** ([docs/META-SETUP.md](docs/META-SETUP.md#a-second-bot-on-the-same-meta-app-never-overwrite-the-first-bots-webhook)): setup reads where Meta routes the number today and never replaces a callback that points to another deployment. A free app gets the app-level callback; an app already serving another bot gets a per-number override (`POST /{phone-number-id}` `webhook_configuration.override_callback_uri`) for this number only. Explicit `replace_webhook` / `--replace-webhook` to replace on purpose; `webhook_scope` (`auto`, `phone`, `waba`, `app`) and `--phone-override` to choose.
 - **Inbound documents, contacts, locations, video** ([docs/MEDIA.md](docs/MEDIA.md)): PDF, Office, CSV, text and HTML documents are read with Workers AI Markdown conversion (free for these types; `MEDIA_READ_DOCUMENTS`, `MEDIA_MAX_DOC_BYTES`, `MEDIA_MAX_DOC_CHARS`); shared contact cards, full locations (coordinates, name, address, map link) and stickers become text; video is noted with its caption.
