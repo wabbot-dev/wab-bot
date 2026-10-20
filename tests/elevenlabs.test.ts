@@ -268,6 +268,23 @@ test("pronunciation layer: clitics and every ساعة form; no false matches; am
   assert.equal(t("Hello الساعة 8"), "Hello السيعة 8");
 });
 
+test("pronunciation layer: imala respellings (Beiruti e) for the Nick voice, with clitics; emphatic/guttural words and look-alikes untouched", () => {
+  const t = (s: string) => lebaneseSpoken(s, { voiceId: "VsqtGXzc5Y1q5G3RuCrZ" }).text;
+  assert.equal(t("وعن الدوام، نحنا فاتحين"), "وعن الدويم، نحنا فيتحين");
+  assert.equal(t("مش لازم، ولازم تجرّب"), "مش ليزم، وليزم تجرّب");
+  assert.equal(t("بزبّطلك ياها، وبحضّرلك ياه"), "بزبّطلك ييها، وبحضّرلك ييه");
+  assert.equal(t("كرسي للولاد، فوق التلاتين، التوصيل ببلاش، شي تاني، حدّ الشبّاك"),
+    "كرسي للوليد، فوق التليتين، التوصيل ببلَيْش، شي تِني، حدّ الشبّيك");
+  assert.equal(t("حد الشباك"), "حد الشبّيك", "bare spelling too");
+  assert.equal(t("طاولة شغّال عايشة رسالة بياخد تمانة منستنّاك أولاد الدوامات"), "طاولة شغّال عايشة رسالة بياخد تمانة منستنّاك أولاد الدوامات");
+  const once = t("الدوام فاتحين لازم ياها ياه للولاد التلاتين ببلاش تاني الشبّاك");
+  assert.equal(lebaneseSpoken(once, { voiceId: "VsqtGXzc5Y1q5G3RuCrZ" }).changes, 0, "idempotent");
+  // the approved Mimi voice already says these with "e": no imala respellings (se3a still applies)
+  const mimi = "وعن الدوام، نحنا فاتحين من الساعة اتنعش، مش لازم";
+  assert.equal(lebaneseSpoken(mimi, { voiceId: "NQyF5U0t336unYhQXcuv" }).text, "وعن الدوام، نحنا فاتحين من السيعة اتنعش، مش لازم");
+  assert.equal(lebaneseSpoken(mimi).text, lebaneseSpoken(mimi, { voiceId: "NQyF5U0t336unYhQXcuv" }).text, "no voice: same as Mimi");
+});
+
 test("pronunciation layer: spoken copy only; the stored and fallback text keep the agent's spelling; off without the Lebanese dialect", async () => {
   const run = async (env: Record<string, string>) => {
     const { h, elBodies } = elHarness(env);

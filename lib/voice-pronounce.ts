@@ -9,6 +9,17 @@
  *    - الساعة / ساعة → السيعة / سيعة: Beiruti "se3a" (imala), not "sa3a" (A/B 2026-10-20: the vowel after the s moved from
  *      F1 ≈ 790 Hz to ≈ 610 Hz with F2 ≈ 2400 Hz, an "e"; the transcript read it back as السيعة).
  *    - كرمالك → كرميلك (said "kirmelak"), the approved script's own spelling.
+ *    - Imala (Beiruti ā → e after plain consonants), A/B-tested on the Nick voice (VsqtGXzc5Y1q5G3RuCrZ, eleven_v4, 2026-10-20) with
+ *      short clips, a formant check (F1/F2 of the vowel) and a Whisper read-back; the bare spelling was said with a plain "a"
+ *      (F1 ≈ 600-700 Hz, F2 ≈ 1300-1600 Hz). Chosen spellings and their vowel:
+ *        دوام → دويم ("dawem"; read back الدويم), فاتحين → فيتحين ("fet7in"; F1 ≈ 520, F2 ≈ 1750-2000),
+ *        لازم → ليزم ("lezem"; F1 ≈ 490, F2 ≈ 1830), ياها / ياه → ييها / ييه ("yeha", "yeh"; F1 ≈ 450-510, F2 ≈ 1800-2050),
+ *        ولاد → وليد ("wled"), تلاتين → تليتين ("tletin"; F1 ≈ 380, F2 ≈ 1950), بلاش → بلَيْش ("blesh"; F1 ≈ 450, F2 ≈ 1950;
+ *        plain بليش overshot to "ii"), تاني → تِني ("tene"; F1 ≈ 425, F2 ≈ 1890; تيني overshot to "tiini"),
+ *        شبّاك → شبّيك ("shebbek"; the voice leans to "ii" here, still nearer than "a").
+ *      Left as written because the voice already says e: تمانة (F1 ≈ 540, F2 ≈ 1860), منستنّاك (read back نستنيك).
+ *      Not respelled: ā next to emphatic, guttural or r consonants, where Beiruti keeps "a" (طاولة، شغّال، عايشة، رسالة، بياخد).
+ *      Applied only for the voices in IMALA_VOICES: the approved Mimi voice already says these with "e" and the respellings made it "ii".
  * Words are matched whole, with the common clitics in front (و ف ب ل ع ك ال لل عال بال), ignoring any vowel marks already present.
  */
 
@@ -33,6 +44,25 @@ export const RESPELL: Record<string, string> = {
   "كرمالكن": "كرميلكن",
 };
 
+/** Voices that say a plain "a" where Beiruti has imala, and so get IMALA_RESPELL. The approved Mimi voice (NQyF5U0t336unYhQXcuv)
+ *  already says these words with "e" (A/B 2026-10-20: F2 ≈ 2300-2500 Hz on the bare spelling); the respellings pushed it to "ii"
+ *  (F2 ≈ 2800-3000 Hz), so it is not listed. */
+export const IMALA_VOICES: readonly string[] = ["VsqtGXzc5Y1q5G3RuCrZ"]; // Nick
+
+/** Imala respellings (see the header), for IMALA_VOICES only. Keys are bare stems; values replace them, clitics kept. */
+export const IMALA_RESPELL: Record<string, string> = {
+  "دوام": "دويم",
+  "فاتحين": "فيتحين",
+  "لازم": "ليزم",
+  "ياها": "ييها",
+  "ياه": "ييه",
+  "ولاد": "وليد",
+  "تلاتين": "تليتين",
+  "بلاش": "بلَيْش",
+  "تاني": "تِني",
+  "شباك": "شبّيك",
+};
+
 type Rule = { re: RegExp; to: string };
 const bare = (w: string) => w.replace(MARKS_RE, "");
 /** a stem whose letters may each carry vowel marks already */
@@ -46,12 +76,15 @@ const RULES: Rule[] = [
   ...Object.entries(RESPELL).map(([k, v]) => rule(k, v)),
   ...APPROVED_SHADDA.map((w) => rule(bare(w), w)),
 ];
+const IMALA_RULES: Rule[] = Object.entries(IMALA_RESPELL).map(([k, v]) => rule(k, v));
 
-/** The spoken copy of an Arabic reply, respelled for a Beiruti voice. `changes` counts the words touched (for logs; no text). */
-export function lebaneseSpoken(text: string): { text: string; changes: number } {
+/** The spoken copy of an Arabic reply, respelled for a Beiruti voice. `changes` counts the words touched (for logs; no text).
+ *  `voiceId` (the ElevenLabs voice) turns on the imala respellings for the voices in IMALA_VOICES. */
+export function lebaneseSpoken(text: string, opts: { voiceId?: string } = {}): { text: string; changes: number } {
   let out = text;
   let changes = 0;
-  for (const r of RULES) {
+  const imala = opts.voiceId !== undefined && IMALA_VOICES.includes(opts.voiceId);
+  for (const r of imala ? [...IMALA_RULES, ...RULES] : RULES) {
     out = out.replace(r.re, (m: string, lead: string, pre: string) => {
       const next = `${lead}${pre}${r.to}`;
       if (next !== m) changes++;

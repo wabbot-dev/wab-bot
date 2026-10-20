@@ -175,7 +175,7 @@ export async function synthesize(ctx: Ctx, text: string, lang: string, where: "d
     // a network call, not CPU work: it runs in this request (no Durable Object needed); the key goes to api.elevenlabs.io only
     const lebanese = lang === "ar" && cfg.arabicReplyDialect === "lebanese";
     // pronunciation layer: the SPOKEN copy only (approved-script shadda + verified respellings); the stored reply text is untouched
-    const p = lebanese ? lebaneseSpoken(text) : { text, changes: 0 };
+    const p = lebanese ? lebaneseSpoken(text, { voiceId: cfg.elevenlabsVoiceId }) : { text, changes: 0 };
     if (p.changes) ctx.log("voice_pronounce", { lang, changes: p.changes });
     try {
       return await speakElevenLabs(ctx.fetch, {
