@@ -44,3 +44,42 @@ export function parseLangMap(
   }
   return { map, ignored };
 }
+
+/** ElevenLabs allows at most this many pronunciation dictionaries per text-to-speech request. */
+export const MAX_PRONUNCIATION_DICTIONARIES = 3;
+export interface DictLocator { pronunciation_dictionary_id: string; version_id?: string }
+const DICT_ID_RE = /^[A-Za-z0-9]{8,40}$/;
+
+/**
+ * ELEVENLABS_PRONUNCIATION_DICTIONARIES: the owner's own ElevenLabs pronunciation dictionaries, as `<dictionary_id>:<version_id>`
+ * entries (the version is optional: without it ElevenLabs uses the latest), separated by commas, semicolons or new lines. An entry with
+ * a language in front (`ar=<dictionary_id>:<version_id>`) applies to that language only; one without applies to every language. At most
+ * three per language and three for all. Malformed entries are skipped and counted, never thrown. Ids are not secrets.
+ */
+export function parseDictionaries(v: string | undefined): { all: DictLocator[]; byLang: Readonly<Record<string, DictLocator[]>>; ignored: number } {
+  const all: DictLocator[] = [];
+  const byLang: Record<string, DictLocator[]> = {};
+  let ignored = 0;
+  for (const part of (v ?? "").split(/[,;\n]/)) {
+    const p = part.trim();
+    if (!p) continue;
+    const m = /^(?:([A-Za-z]{2})\s*=\s*)?([^:=\s]+)(?:\s*:\s*([^:=\s]+))?$/.exec(p);
+    const lang = m?.[1]?.toLowerCase();
+    const id = m?.[2] ?? "";
+    const ver = m?.[3];
+    if (!m || !DICT_ID_RE.test(id) || (ver !== undefined && !DICT_ID_RE.test(ver))) { ignored++; continue; }
+    const list = lang ? (byLang[lang] ??= []) : all;
+    if (list.length >= MAX_PRONUNCIATION_DICTIONARIES || list.some((d) => d.pronunciation_dictionary_id === id)) { ignored++; continue; }
+    list.push(ver ? { pronunciation_dictionary_id: id, version_id: ver } : { pronunciation_dictionary_id: id });
+  }
+  return { all, byLang, ignored };
+}
+
+/** The dictionaries for one request: the language's own first, then the ones for every language; at most three (ElevenLabs' limit). */
+export function dictionariesFor(d: { all: DictLocator[]; byLang: Readonly<Record<string, DictLocator[]>> }, lang: string): DictLocator[] {
+  const out: DictLocator[] = [];
+  for (const x of [...(d.byLang[lang] ?? []), ...d.all]) {
+    if (out.length < MAX_PRONUNCIATION_DICTIONARIES && !out.some((o) => o.pronunciation_dictionary_id === x.pronunciation_dictionary_id)) out.push(x);
+  }
+  return out;
+}

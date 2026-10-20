@@ -10,10 +10,11 @@ All notable changes are recorded here. The format follows [Keep a Changelog](htt
 
 ### Features
 - **A voice per language** ([docs/VOICE-REPLIES.md](docs/VOICE-REPLIES.md#a-voice-per-language)): `ELEVENLABS_VOICE_IDS` (`ar=<id>,en=<id>` or JSON), with `ELEVENLABS_VOICE_ID` as the fallback; optional `ELEVENLABS_MODEL_IDS` and `VOICE_STYLE_TAGS` per language. Malformed entries are skipped (never fatal), logged as `voice_map_ignored` (counts only) and shown in `get_overview`.
-- `get_overview` → `media`: `voice_routing` (provider per language) and, for ElevenLabs, `voices` (voice id per language, `*` = fallback; never the key), `model_ids`, `style_tag_languages`, `ignored_entries`. The owner voice self-test returns `voice_id`, `voice_from` and `chars_sent`.
+- **ElevenLabs pronunciation dictionaries** ([docs/VOICE-REPLIES.md](docs/VOICE-REPLIES.md#pronunciation-dictionaries-elevenlabs)): `ELEVENLABS_PRONUNCIATION_DICTIONARIES` (`<id>:<version>`, version optional, or per language `ar=<id>:<version>`) sends the owner's own dictionaries as `pronunciation_dictionary_locators` (at most 3 per reply). The bot's own respelling is applied first. The key needs Pronunciation Dictionaries (read). Unset = unchanged request.
+- `get_overview` → `media`: `voice_routing` (provider per language) and, for ElevenLabs, `voices` (voice id per language, `*` = fallback; never the key), `model_ids`, `style_tag_languages`, `pronunciation_dictionaries`, `ignored_entries`. The owner voice self-test returns `voice_id`, `voice_from` and `chars_sent`.
 
 ### Documentation
-- How to make a restricted ElevenLabs key (Text to Speech + Voices read, credit limit), and that an ElevenLabs plugin sign-in is separate from the Worker key. STATUS.md no longer calls the xAI and ElevenLabs providers unreleased (they shipped in 0.4.0). The hygiene scan comment names xAI as a voice-reply provider.
+- How to make a restricted ElevenLabs key (Text to Speech + Voices read, Pronunciation Dictionaries read when dictionaries are used, credit limit), and that an ElevenLabs plugin sign-in is separate from the Worker key. STATUS.md no longer calls the xAI and ElevenLabs providers unreleased (they shipped in 0.4.0). The hygiene scan comment names xAI as a voice-reply provider.
 
 ## [0.4.1] - 2026-10-21 (preview)
 

@@ -158,6 +158,8 @@ function mediaOverview(ctx: Ctx, m: MediaMetrics | null, now: number): Json {
             voices: { ...cfg.elevenlabsVoiceIds, "*": cfg.elevenlabsVoiceId ?? null },
             model_ids: { ...cfg.elevenlabsModelIds },
             style_tag_languages: Object.keys(cfg.voiceStyleTags),
+            // the owner's pronunciation dictionaries (ids and versions only): "*" = every language, then per language
+            pronunciation_dictionaries: { ...Object.fromEntries(Object.entries(cfg.elevenlabsDictionaries.byLang).map(([l, d]) => [l, d.map((x) => `${x.pronunciation_dictionary_id}:${x.version_id ?? "latest"}`)])), "*": cfg.elevenlabsDictionaries.all.map((x) => `${x.pronunciation_dictionary_id}:${x.version_id ?? "latest"}`) },
             ignored_entries: cfg.voiceMapIgnored,
           },
         }

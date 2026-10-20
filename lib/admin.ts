@@ -387,7 +387,7 @@ export async function adminVoiceSelftest(ctx: Ctx, req: Request): Promise<Respon
   if (!s.ok) return Response.json({ ok: false, error: s.code, ms: t1 - t0 });
   if (q("audio") === "1") return new Response(s.ogg as unknown as BodyInit, { headers: { "content-type": "audio/ogg; codecs=opus", "cache-control": "no-store" } });
   const el = s.provider === "elevenlabs";
-  const out: Json = { ok: true, lang, provider: s.provider ?? "workers-ai", model: el ? ctx.cfg.elevenlabsModelId : s.provider === "xai" ? `xai:${ctx.cfg.xaiTtsVoice}` : ctx.cfg.voiceTtsModel, where: el ? "worker" : where, tts_and_encode_ms: t1 - t0, tts_bytes: s.ttsBytes, ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, mono_ogg_opus: isMonoOggOpus(s.ogg), ...(el ? { model: s.modelId ?? ctx.cfg.elevenlabsModelId, voice_id: s.voiceId ?? null, voice_from: s.voiceFrom ?? null, chars_sent: s.chars ?? null } : {}) };
+  const out: Json = { ok: true, lang, provider: s.provider ?? "workers-ai", model: el ? ctx.cfg.elevenlabsModelId : s.provider === "xai" ? `xai:${ctx.cfg.xaiTtsVoice}` : ctx.cfg.voiceTtsModel, where: el ? "worker" : where, tts_and_encode_ms: t1 - t0, tts_bytes: s.ttsBytes, ogg_bytes: s.ogg.length, seconds: Math.round(s.seconds * 10) / 10, mono_ogg_opus: isMonoOggOpus(s.ogg), ...(el ? { model: s.modelId ?? ctx.cfg.elevenlabsModelId, voice_id: s.voiceId ?? null, voice_from: s.voiceFrom ?? null, chars_sent: s.chars ?? null, pronunciation_dictionaries: s.dictionaries ?? 0 } : {}) };
   if (q("upload") === "1") {
     if (!pn || !ctx.cfg.waAccessToken) return Response.json({ ...out, ok: false, error: "needs_phone_number_id_and_token" });
     const up = await uploadVoice(ctx, pn, s.ogg);

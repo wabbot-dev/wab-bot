@@ -211,7 +211,7 @@ test("mirror + elevenlabs: an Arabic reply to a voice note goes out as an Eleven
   assert.equal(ov.media.voice_reply_provider, "elevenlabs");
   assert.deepEqual(ov.media.elevenlabs, {
     key_present: true, voice_id_set: true, model_id: "eleven_v4", max_chars: 600, style_tag_set: false,
-    voices: { "*": VOICE }, model_ids: {}, style_tag_languages: [], ignored_entries: { voice_ids: 0, model_ids: 0, style_tags: 0 },
+    voices: { "*": VOICE }, model_ids: {}, style_tag_languages: [], pronunciation_dictionaries: { "*": [] }, ignored_entries: { voice_ids: 0, model_ids: 0, style_tags: 0, pronunciation_dictionaries: 0 },
   });
   assert.ok(h.logs.some((l) => l.event === "voice_prepared" && l.fields?.provider === "elevenlabs"));
   assert.ok(!JSON.stringify(h.logs).includes(KEY), "the key is never in a log line");

@@ -28,6 +28,7 @@ export interface Env {
   ELEVENLABS_VOICE_IDS?: string;
   ELEVENLABS_MODEL_IDS?: string;
   VOICE_STYLE_TAGS?: string;
+  ELEVENLABS_PRONUNCIATION_DICTIONARIES?: string;
   ELEVENLABS_MODEL_ID?: string;
   ELEVENLABS_MAX_CHARS?: string;
   VOICE_STYLE_TAG?: string;

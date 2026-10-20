@@ -8,7 +8,9 @@ import { createMcpRoute } from "../lib/mcp";
 import { getOverview } from "../lib/overview";
 import { claimConversation, getHistory, sendReply } from "../lib/tools";
 import { muxOggOpus } from "../lib/voice-encode";
-import { parseLangMap } from "../lib/voice-map";
+import { dictionariesFor, parseDictionaries, parseLangMap } from "../lib/voice-map";
+import { elevenLabsErrorCode } from "../lib/tts-elevenlabs";
+import { spokenCopy } from "../lib/voice-pronounce";
 import { elevenLabsVoiceFor, synthesize, ttsProviderFor, voiceLanguagesOf, voiceRoutingOf, type SpeakArgs } from "../lib/voice-reply";
 import { DIALECT_STYLES, NEUTRAL_ADDRESS, spokenStyle } from "../lib/voice-style";
 import { activate, baseEnv, cid, inboundPayload, makeHarness, MCP_TOKEN, post } from "./helpers";
@@ -66,10 +68,10 @@ test("config: VOICE_REPLY_ROUTING defaults to all; per-language voices, models a
   assert.deepEqual(c.elevenlabsVoiceIds, { ar: V_AR, en: V_EN });
   assert.deepEqual(c.elevenlabsModelIds, { ar: "eleven_v3" });
   assert.deepEqual(c.voiceStyleTags, { ar: "[warm, slow]", en: "[calm, friendly]" }, "commas stay inside a tag");
-  assert.deepEqual(c.voiceMapIgnored, { voice_ids: 2, model_ids: 1, style_tags: 1 });
+  assert.deepEqual(c.voiceMapIgnored, { voice_ids: 2, model_ids: 1, style_tags: 1, pronunciation_dictionaries: 0 });
   const none = loadConfig(baseEnv());
   assert.deepEqual(none.elevenlabsVoiceIds, {});
-  assert.deepEqual(none.voiceMapIgnored, { voice_ids: 0, model_ids: 0, style_tags: 0 });
+  assert.deepEqual(none.voiceMapIgnored, { voice_ids: 0, model_ids: 0, style_tags: 0, pronunciation_dictionaries: 0 });
 });
 
 test("voice per language: the language's own voice, model and tag, else ELEVENLABS_VOICE_ID / MODEL_ID / STYLE_TAG", () => {
@@ -127,10 +129,10 @@ test("bad per-language config: entries skipped with a voice_map_ignored log line
   assert.equal(r.ok, true);
   assert.deepEqual(el.map((c) => c.voice), [V_DEF]);
   const line = h.logs.find((l) => l.event === "voice_map_ignored");
-  assert.deepEqual(line?.fields, { voice_ids: 2, model_ids: 1, style_tags: 0 });
+  assert.deepEqual(line?.fields, { voice_ids: 2, model_ids: 1, style_tags: 0, pronunciation_dictionaries: 0 });
   assert.ok(!JSON.stringify(h.logs).includes("not a voice"), "the bad value itself is not logged");
   const ov: any = await getOverview(h.ctx, null);
-  assert.deepEqual(ov.media.elevenlabs.ignored_entries, { voice_ids: 2, model_ids: 1, style_tags: 0 });
+  assert.deepEqual(ov.media.elevenlabs.ignored_entries, { voice_ids: 2, model_ids: 1, style_tags: 0, pronunciation_dictionaries: 0 });
   // no voice at all for a language Workers AI lacks: the text goes instead, no ElevenLabs call
   const n = harness({ ELEVENLABS_VOICE_IDS: `ar=${V_AR}` });
   const d = await synthesize(n.h.ctx, "Ihr Termin ist bestätigt.", "de");
@@ -180,4 +182,42 @@ test("gender-neutral address: every Arabic preset, the text-reply guidance and t
   const j = JSON.parse(line ? line.slice(5) : t);
   const send = j.result.tools.find((x: any) => x.name === "send_reply");
   assert.ok(send.description.includes(NEUTRAL_ADDRESS), "text replies get the same guidance");
+});
+
+const D1 = "DictOne0000000000001", D1V = "VerOne00000000000001", D2 = "DictTwo0000000000002", D3 = "DictThree00000000003", D4 = "DictFour000000000004";
+
+test("pronunciation dictionaries: id:version entries, optional version, per language; bad entries skipped and counted; at most 3", () => {
+  const d = parseDictionaries(`${D1}:${D1V}, ar=${D2}; AR = ${D3}:${D1V}\n${D4}`);
+  assert.deepEqual(d.all, [{ pronunciation_dictionary_id: D1, version_id: D1V }, { pronunciation_dictionary_id: D4 }]);
+  assert.deepEqual(d.byLang, { ar: [{ pronunciation_dictionary_id: D2 }, { pronunciation_dictionary_id: D3, version_id: D1V }] });
+  assert.equal(d.ignored, 0);
+  assert.equal(parseDictionaries(`bad id:x, ${D1}:short, english=${D1}, ${D1}:${D1V}:extra, ${D1}, ${D1}`).ignored, 5, "only the first plain entry is kept; the duplicate is skipped too");
+  assert.equal(parseDictionaries(`${D1},${D2},${D3},${D4}`).all.length, 3, "ElevenLabs' limit");
+  assert.deepEqual(parseDictionaries(undefined), { all: [], byLang: {}, ignored: 0 });
+  // per request: the language's own first, then the ones for every language, deduplicated, at most 3
+  assert.deepEqual(dictionariesFor(d, "ar").map((x) => x.pronunciation_dictionary_id), [D2, D3, D1]);
+  assert.deepEqual(dictionariesFor(d, "en").map((x) => x.pronunciation_dictionary_id), [D1, D4]);
+  assert.equal(elevenLabsErrorCode(404, { detail: { status: "pronunciation_dictionary_not_found" } }), "voice_tts_el_dictionary");
+});
+
+test("pronunciation dictionaries in the request: locators only when set; the bot's own respelling is applied first; overview ids only", async () => {
+  const { h, el } = harness({
+    ELEVENLABS_VOICE_ID: V_DEF, ELEVENLABS_VOICE_IDS: `ar=${V_AR}`, VOICE_PRONUNCIATIONS: "Acme=Akmee",
+    ELEVENLABS_PRONUNCIATION_DICTIONARIES: `ar=${D2}:${D1V},${D1},nonsense!`,
+  });
+  await synthesize(h.ctx, `أهلا فيكن في Acme`, "ar");
+  await synthesize(h.ctx, EN, "en");
+  assert.deepEqual(el[0]!.body.pronunciation_dictionary_locators, [{ pronunciation_dictionary_id: D2, version_id: D1V }, { pronunciation_dictionary_id: D1 }]);
+  assert.equal(el[0]!.body.text, spokenCopy("أهلا فيكن في Acme", { lang: "ar", dialect: "none", pronunciations: { Acme: "Akmee" } }).text, "respelled before ElevenLabs applies the dictionary");
+  assert.ok(el[0]!.body.text.includes("Akmee"));
+  assert.deepEqual(el[1]!.body.pronunciation_dictionary_locators, [{ pronunciation_dictionary_id: D1 }]);
+  assert.deepEqual(h.logs.find((l) => l.event === "voice_map_ignored")?.fields, { voice_ids: 0, model_ids: 0, style_tags: 0, pronunciation_dictionaries: 1 });
+  assert.ok(h.logs.some((l) => l.event === "voice_el_voice" && l.fields?.dictionaries === 2));
+  const ov: any = await getOverview(h.ctx, null);
+  assert.deepEqual(ov.media.elevenlabs.pronunciation_dictionaries, { ar: [`${D2}:${D1V}`], "*": [`${D1}:latest`] });
+  assert.ok(!JSON.stringify(ov).includes(KEY));
+  // unset: the request is exactly as before (no locators field at all)
+  const plain = harness({ ELEVENLABS_VOICE_ID: V_DEF });
+  await synthesize(plain.h.ctx, EN, "en");
+  assert.deepEqual(Object.keys(plain.el[0]!.body), ["text", "model_id"]);
 });

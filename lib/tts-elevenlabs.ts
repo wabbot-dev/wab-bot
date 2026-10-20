@@ -8,7 +8,7 @@
  * The key (ELEVENLABS_API_KEY) goes only to api.elevenlabs.io in the xi-api-key header. It is never logged, returned or stored by the
  * bridge; errors come back as short codes, never as the provider's response body. Nothing is retried.
  *
- * The request carries only text and model_id, like the ElevenLabs studio does: no voice_settings (the voice's own saved settings
+ * The request carries only text and model_id (plus the owner's pronunciation_dictionary_locators when set), like the ElevenLabs studio does: no voice_settings (the voice's own saved settings
  * apply) and no language_code (forcing "ar" pushed a dialect voice toward standard Arabic in a 2026-10-20 A/B run). With the owner's
  * VOICE_STYLE_TAG (or that language's VOICE_STYLE_TAGS entry) set, a tag-aware model (eleven_v3/v4) gets that one inline direction in
  * front of the text (lib/voice-style.ts).
@@ -16,6 +16,7 @@
 import { oggOpusSeconds, type MediaCounts } from "./media";
 import { isMonoOggOpus, speakable, type SpeakResult } from "./voice-reply";
 import { stripAudioTags } from "./voice-style";
+import type { DictLocator } from "./voice-map";
 
 export const ELEVENLABS_HOST = "https://api.elevenlabs.io";
 export const ELEVENLABS_OUTPUT_FORMAT = "opus_48000_64";
@@ -32,6 +33,8 @@ export interface ElevenLabsArgs {
   timeoutMs: number;
   /** optional inline direction for tag-aware models (the owner's VOICE_STYLE_TAG, e.g. "[warm, friendly]"); not counted against maxChars */
   accentTag?: string;
+  /** optional: the owner's pronunciation dictionaries (ELEVENLABS_PRONUNCIATION_DICTIONARIES), at most 3; sent as pronunciation_dictionary_locators */
+  dictionaries?: DictLocator[];
 }
 
 const fail = (code: string, count: Partial<MediaCounts> = { voice_tts_failed: 1 }): SpeakResult => ({ ok: false, code: code.slice(0, 40), count });
@@ -50,6 +53,7 @@ export function elevenLabsErrorCode(status: number, body: unknown): string {
   if (status === 401 || status === 403) return w === "missing_permissions" ? "voice_tts_el_permission" : "voice_tts_el_auth";
   if (w === "voice_not_found" || (status === 404 && !w)) return "voice_tts_el_voice_not_found";
   if (/model/.test(w)) return "voice_tts_el_model";
+  if (/pronunciation|dictionar/.test(w)) return "voice_tts_el_dictionary";
   return `voice_tts_el_http_${status}`;
 }
 
@@ -70,7 +74,7 @@ export async function speakElevenLabs(fetcher: typeof fetch, a: ElevenLabsArgs):
     res = await fetcher(url, {
       method: "POST",
       headers: { "xi-api-key": a.apiKey, "content-type": "application/json", accept: "audio/ogg" },
-      body: JSON.stringify({ text: sent, model_id: a.modelId }),
+      body: JSON.stringify({ text: sent, model_id: a.modelId, ...(a.dictionaries?.length ? { pronunciation_dictionary_locators: a.dictionaries.slice(0, 3) } : {}) }),
       signal: ac.signal,
     });
     if (!res.ok) {

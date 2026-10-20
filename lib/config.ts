@@ -1,6 +1,6 @@
 import { parsePronunciations } from "./voice-pronounce";
 import { styleTagOf } from "./voice-style";
-import { parseLangMap, type LangMap } from "./voice-map";
+import { parseDictionaries, parseLangMap, type DictLocator, type LangMap } from "./voice-map";
 /** Workers AI defaults for inbound media (docs/MEDIA.md). */
 export const DEFAULT_STT_MODEL = "@cf/openai/whisper-large-v3-turbo";
 export const DEFAULT_VISION_MODEL = "@cf/meta/llama-4-scout-17b-16e-instruct";
@@ -175,8 +175,10 @@ export interface Config {
   elevenlabsModelIds: LangMap;
   /** VOICE_STYLE_TAGS (optional, e.g. "ar=[warm]; en=[calm, friendly]"): a style tag per language; VOICE_STYLE_TAG for the rest */
   voiceStyleTags: LangMap;
-  /** malformed entries skipped in the three maps above (logged as voice_map_ignored, shown in get_overview; never fatal) */
-  voiceMapIgnored: { voice_ids: number; model_ids: number; style_tags: number };
+  /** ELEVENLABS_PRONUNCIATION_DICTIONARIES (optional): the owner's dictionaries, for every language (`all`) and per language */
+  elevenlabsDictionaries: { all: DictLocator[]; byLang: Readonly<Record<string, DictLocator[]>> };
+  /** malformed entries skipped in the maps above (logged as voice_map_ignored, shown in get_overview; never fatal) */
+  voiceMapIgnored: { voice_ids: number; model_ids: number; style_tags: number; pronunciation_dictionaries: number };
   /** ELEVENLABS_MODEL_ID (default eleven_v4) */
   elevenlabsModelId: string;
   /** ELEVENLABS_MAX_CHARS (default 600, 20 to 1500): longer replies go as text (ElevenLabs bills per character) */
@@ -338,13 +340,14 @@ export function loadConfig(env: Env): Config {
     elevenlabsApiKey: env.ELEVENLABS_API_KEY?.trim() || undefined,
     voiceReplyRouting: /^non-workers-ai$/i.test(env.VOICE_REPLY_ROUTING?.trim() ?? "") ? "non-workers-ai" : "all",
     elevenlabsVoiceId: ELEVENLABS_VOICE_ID_RE.test(env.ELEVENLABS_VOICE_ID?.trim() ?? "") ? env.ELEVENLABS_VOICE_ID!.trim() : undefined,
-    ...((v, m, t) => ({
-      elevenlabsVoiceIds: v.map, elevenlabsModelIds: m.map, voiceStyleTags: t.map,
-      voiceMapIgnored: { voice_ids: v.ignored, model_ids: m.ignored, style_tags: t.ignored },
+    ...((v, m, t, d) => ({
+      elevenlabsVoiceIds: v.map, elevenlabsModelIds: m.map, voiceStyleTags: t.map, elevenlabsDictionaries: { all: d.all, byLang: d.byLang },
+      voiceMapIgnored: { voice_ids: v.ignored, model_ids: m.ignored, style_tags: t.ignored, pronunciation_dictionaries: d.ignored },
     }))(
       parseLangMap(env.ELEVENLABS_VOICE_IDS, (x) => (ELEVENLABS_VOICE_ID_RE.test(x) ? x : undefined)),
       parseLangMap(env.ELEVENLABS_MODEL_IDS, (x) => (ELEVENLABS_MODEL_ID_RE.test(x) ? x : undefined)),
       parseLangMap(env.VOICE_STYLE_TAGS, styleTagOf, { commas: false }),
+      parseDictionaries(env.ELEVENLABS_PRONUNCIATION_DICTIONARIES),
     ),
     elevenlabsModelId: ELEVENLABS_MODEL_ID_RE.test(env.ELEVENLABS_MODEL_ID?.trim() ?? "") ? env.ELEVENLABS_MODEL_ID!.trim() : DEFAULT_ELEVENLABS_MODEL_ID,
     elevenlabsMaxChars: intIn(env.ELEVENLABS_MAX_CHARS, 600, 20, 1500),

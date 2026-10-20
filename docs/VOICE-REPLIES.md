@@ -93,7 +93,7 @@ language.
   (48 kHz, 64 kbit/s), which WhatsApp shows as a voice note, so it is uploaded as `audio/ogg` and sent as `type: "audio"` with `voice: true`
   through the same upload and send code as Workers AI replies. Nothing is decoded or re-encoded, so no Durable Object is involved.
 - **Model:** `eleven_v4` (default) was accepted by the public API on 2026-10-20; `eleven_v3` also works.
-- **Same request as the ElevenLabs studio:** only `text` and `model_id` are sent. No `voice_settings`, so the voice's own saved settings
+- **Same request as the ElevenLabs studio:** only `text` and `model_id` are sent (plus your [pronunciation dictionaries](#pronunciation-dictionaries-elevenlabs), if set). No `voice_settings`, so the voice's own saved settings
   apply, and no `language_code`: forcing `"ar"` pushed a dialect voice toward standard Arabic in an A/B run on 2026-10-20.
 - **Style tag (optional):** `VOICE_STYLE_TAG`, for example `warm, friendly` or an accent direction that suits your voice, is put in front
   of the text as `[warm, friendly] <reply>` on tag-aware models (`eleven_v3`, `eleven_v4`) only. The model reads the bracket as direction,
@@ -103,7 +103,7 @@ language.
   audio over `VOICE_MAX_SECONDS` or 500 KB goes as text.
 - **Errors and quota:** any ElevenLabs error sends the text instead, once, with no retry. Codes: `voice_tts_el_quota` (quota or credits
   used up), `voice_tts_el_rate_limited` (429 or too many concurrent requests), `voice_tts_el_auth` / `voice_tts_el_permission` (key),
-  `voice_tts_el_voice_not_found`, `voice_tts_el_model`, `voice_tts_el_http_xxx`, `voice_tts_el_timeout`, `voice_tts_el_network`,
+  `voice_tts_el_voice_not_found`, `voice_tts_el_model`, `voice_tts_el_dictionary`, `voice_tts_el_http_xxx`, `voice_tts_el_timeout`, `voice_tts_el_network`,
   `voice_tts_el_not_ogg_opus`, `voice_tts_el_key_missing`, `voice_tts_el_voice_missing`. Only ElevenLabs' short `detail.status` word is
   read from an error; its message is never echoed or logged.
 - **Key:** `ELEVENLABS_API_KEY` is a Worker secret (stdin only: `wrangler secret put ELEVENLABS_API_KEY < key-file`) or self-provisioned.
@@ -138,10 +138,35 @@ VOICE_STYLE_TAGS='ar=[warm, slow]; en=[calm, friendly]'     # optional: a style 
   `media.elevenlabs.ignored_entries`.
 - The owner self-test (below) returns `voice_id`, `voice_from` (`language` or `default`) and `chars_sent` for an ElevenLabs reply.
 
+### Pronunciation dictionaries (ElevenLabs)
+
+Optional. If you keep a [pronunciation dictionary](https://elevenlabs.io/docs/api-reference/text-to-speech/convert) in your own
+ElevenLabs account (alias or phoneme rules for brand names, places or dialect words), the bot can use it for every voice reply:
+
+```bash
+ELEVENLABS_PRONUNCIATION_DICTIONARIES='<dictionary id>:<version id>'                 # every language
+ELEVENLABS_PRONUNCIATION_DICTIONARIES='ar=<dictionary id>:<version id>,<dictionary id>'  # one for Arabic, one for every language
+```
+
+- Entries are `<dictionary id>:<version id>`, separated by commas, semicolons or new lines. The version is optional (without it ElevenLabs
+  uses the latest version); pin one so an edit in the ElevenLabs app does not change replies before you have listened to it. An entry with
+  a language in front (`ar=...`) applies to that language only.
+- They go to ElevenLabs as `pronunciation_dictionary_locators` in the same request (the language's own first, then the ones for every
+  language; **at most three**, ElevenLabs' limit). Unset = the request is exactly as before.
+- **Order:** the bot's own respelling ([pronunciation list](#pronunciation-list) and the preset's marks) is applied to the spoken copy
+  first; ElevenLabs then applies your dictionaries to the text it receives, whole words, in order. The two do not conflict, but a word your
+  list already respelled no longer matches a dictionary rule for its original spelling, so keep each word in one place.
+- A malformed entry is skipped and counted (`voice_map_ignored`, `get_overview` → `media.elevenlabs.ignored_entries`); `get_overview`
+  shows the dictionary ids and versions per language (`pronunciation_dictionaries`, never the key).
+- **Key permission:** the Worker's ElevenLabs key needs **Pronunciation Dictionaries** (read; write also works) besides Text to Speech and
+  Voices read. Without it ElevenLabs refuses the request (`voice_tts_el_permission`) and the text is sent instead. A dictionary that does
+  not exist gives `voice_tts_el_dictionary` (or `voice_tts_el_http_xxx`).
+
 ### A restricted ElevenLabs key
 
 Make a key just for the bot in the ElevenLabs app (**Developers** in the left sidebar → **API Keys** → create a key). Keep **Restrict Key**
-on (the default), enable only **Text to Speech** and **Voices** (read), and set a **credit limit** (a monthly cap you can afford). Then the
+on (the default), enable only **Text to Speech** and **Voices** (read), plus **Pronunciation Dictionaries** (read) if you use
+[dictionaries](#pronunciation-dictionaries-elevenlabs), and set a **credit limit** (a monthly cap you can afford). Then the
 key can only speak with your voices; it cannot change voices, agents or your account, and a leak or a loop costs at most the limit
 (ElevenLabs' [key guide](https://elevenlabs.io/blog/api-authentication-and-key-management)). Store it with
 `wrangler secret put ELEVENLABS_API_KEY` (stdin only). Signing in to ElevenLabs in your assistant's plugin (to browse the voice library and
@@ -217,6 +242,7 @@ The reply text that is stored, shown in history and sent as a text fallback is n
 | `ELEVENLABS_MAX_CHARS` | 600 (20 to 1500) | Longer replies go as text, with no ElevenLabs call |
 | `VOICE_STYLE_TAG` | (unset) | Optional direction for tag-aware ElevenLabs models, e.g. `warm, friendly` |
 | `VOICE_STYLE_TAGS` | (unset) | Optional style tag per language, e.g. `ar=[warm]; en=[calm]` |
+| `ELEVENLABS_PRONUNCIATION_DICTIONARIES` | (unset) | Optional: your ElevenLabs dictionaries, `<id>:<version>` or `ar=<id>:<version>`, at most 3 per reply ([above](#pronunciation-dictionaries-elevenlabs)) |
 | `VOICE_PRONUNCIATIONS` | (unset) | Optional `written => spoken` list for the spoken copy ([above](#pronunciation-list)) |
 | `ARABIC_REPLY_DIALECT` | `none` | Optional preset: `msa`, `lebanese`, `gulf` or `egyptian` ([above](#arabic-dialect-presets)) |
 

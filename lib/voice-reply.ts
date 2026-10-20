@@ -20,6 +20,7 @@ import type { Config } from "./config";
 import { speakElevenLabs } from "./tts-elevenlabs";
 import { speakXai, xaiLanguage } from "./tts-xai";
 import { spokenCopy } from "./voice-pronounce";
+import { dictionariesFor } from "./voice-map";
 import { spokenStyle, supportsAudioTags } from "./voice-style";
 import type { Conv, Msg } from "./types";
 
@@ -114,7 +115,7 @@ export function isMonoOggOpus(b: Uint8Array): boolean {
 
 /** `xai` set = speak with xAI (key read inside the Durable Object, never passed in the call); otherwise the Workers AI model. */
 export interface SpeakArgs { text: string; lang: string; model: string; maxSeconds: number; timeoutMs: number; xai?: { voice: string; language: string; maxChars: number; replace?: Record<string, string> } }
-export type SpeakResult = { ok: true; ogg: Uint8Array; seconds: number; ttsBytes: number; provider?: TtsProvider; voiceId?: string; voiceFrom?: string; modelId?: string; chars?: number } | { ok: false; code: string; count: Partial<MediaCounts> };
+export type SpeakResult = { ok: true; ogg: Uint8Array; seconds: number; ttsBytes: number; provider?: TtsProvider; voiceId?: string; voiceFrom?: string; modelId?: string; chars?: number; dictionaries?: number } | { ok: false; code: string; count: Partial<MediaCounts> };
 /** Text-to-speech + encoding in one step. In production a Durable Object runs it (src/call-do.ts), so the model's large audio
  *  answer is decoded and encoded there (30 s CPU per invocation) and only the small Ogg file comes back to the request. */
 export type VoiceSpeaker = (a: SpeakArgs) => Promise<SpeakResult>;
@@ -215,15 +216,19 @@ export async function synthesize(ctx: Ctx, text: string, lang: string, where: "d
     // a network call, not CPU work: it runs in this request (no Durable Object needed); the key goes to api.elevenlabs.io only
     const v = elevenLabsVoiceFor(cfg, lang);
     const ig = cfg.voiceMapIgnored;
-    if (ig.voice_ids || ig.model_ids || ig.style_tags) ctx.log("voice_map_ignored", ig);
+    if (ig.voice_ids || ig.model_ids || ig.style_tags || ig.pronunciation_dictionaries) ctx.log("voice_map_ignored", ig);
+    // order: the bot's own respelling above (VOICE_PRONUNCIATIONS, preset marks) shapes the text first; ElevenLabs then applies the
+    // owner's dictionaries to the text it receives (whole-word rules), so a word the list already respelled no longer matches a rule
+    const dicts = dictionariesFor(cfg.elevenlabsDictionaries, lang);
     try {
       const r = await speakElevenLabs(ctx.fetch, {
         text: p.text, apiKey: cfg.elevenlabsApiKey ?? "", voiceId: v.voiceId ?? "", modelId: v.modelId,
         maxChars: cfg.elevenlabsMaxChars, maxSeconds: cfg.voiceMaxSeconds, timeoutMs: cfg.voiceTimeoutMs,
         accentTag: v.styleTag && supportsAudioTags(v.modelId) ? v.styleTag : undefined,
+        ...(dicts.length ? { dictionaries: dicts } : {}),
       });
-      ctx.log("voice_el_voice", { lang, voice_from: v.voiceFrom, ok: r.ok });
-      return r.ok ? { ...r, voiceId: v.voiceId, voiceFrom: v.voiceFrom, modelId: v.modelId } : r;
+      ctx.log("voice_el_voice", { lang, voice_from: v.voiceFrom, dictionaries: dicts.length, ok: r.ok });
+      return r.ok ? { ...r, voiceId: v.voiceId, voiceFrom: v.voiceFrom, modelId: v.modelId, dictionaries: dicts.length } : r;
     } catch {
       return { ok: false, code: "voice_tts_el_error", count: { voice_tts_failed: 1 } };
     }
