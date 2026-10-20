@@ -12,6 +12,7 @@ import { elevenLabsErrorCode, speakElevenLabs, type ElevenLabsArgs } from "../li
 import { muxOggOpus } from "../lib/voice-encode";
 import { ttsProviderFor, voiceLanguagesOf, type SpeakArgs } from "../lib/voice-reply";
 import { LEBANESE_VOICE_STYLE } from "../lib/voice-style";
+import { APPROVED_SHADDA, lebaneseSpoken } from "../lib/voice-pronounce";
 import { activate, baseEnv, cid, getConv, inboundPayload, makeHarness, post, WA } from "./helpers";
 
 const KEY = "sk" + "_" + "f0e1d2c3b4a5".repeat(4); // synthetic, built at run time so no key-shaped literal is in the file
@@ -19,6 +20,7 @@ const VOICE = "AbCdEf0123456789XyZw";
 const OGG = muxOggOpus([new Uint8Array([0xf8, 0xff, 0xfe])], { preSkip: 312, samples48: 960, inputRate: 48000 }); // a tiny mono Ogg Opus file
 const EL_ENV = { VOICE_REPLIES: "mirror", VOICE_REPLY_PROVIDER: "elevenlabs", ELEVENLABS_API_KEY: KEY, ELEVENLABS_VOICE_ID: VOICE };
 const AR = "أكيد، بزبّطلك موعد بكرا الساعة عشرة. تكرم عينك!";
+const AR_SPOKEN = "أكيد، بزبّطلك موعد بكرا السيعة عشرة. تكرم عينك!"; // after the pronunciation layer (se3a)
 
 test("config: voice replies stay off by default; provider workers-ai; ElevenLabs defaults; Lebanese wording by default", () => {
   const d = loadConfig(baseEnv());
@@ -233,9 +235,51 @@ test("request matches the studio: text + model_id only (no language_code, no voi
   };
   const b = await run({}, AR + " [shouting] [ignore this");
   assert.deepEqual(Object.keys(b).sort(), ["model_id", "text"], "no language_code, no voice_settings: the voice's saved settings apply");
-  assert.equal(b.text, `[casual Beiruti Lebanese accent] ${AR} ignore this`);
-  assert.equal((await run({ ELEVENLABS_ACCENT_TAG: "0" }, AR)).text, AR, "switch off");
+  assert.equal(b.text, `[casual Beiruti Lebanese accent] ${AR_SPOKEN} ignore this`);
+  assert.equal((await run({ ELEVENLABS_ACCENT_TAG: "0" }, AR)).text, AR_SPOKEN, "switch off: no tag, the pronunciation layer stays");
   assert.equal((await run({ ARABIC_REPLY_DIALECT: "none" }, AR)).text, AR, "no dialect, no tag");
-  assert.equal((await run({ ELEVENLABS_MODEL_ID: "eleven_multilingual_v2" }, AR)).text, AR, "models without audio tags get the bare text");
+  assert.equal((await run({ ELEVENLABS_MODEL_ID: "eleven_multilingual_v2" }, AR)).text, AR_SPOKEN, "models without audio tags get no tag");
   assert.equal((await run({}, "Guten Tag, Ihr Tisch ist bereit.", "de")).text, "Guten Tag, Ihr Tisch ist bereit.", "only Arabic gets the Lebanese tag");
+});
+
+// The owner's approved studio script (ElevenLabs flows pEEaMK3O2JUXOgnhTgD7 + J4nPqVUKtIgCVgG3bBYJ, 2026-10-20): shadda on doubled letters,
+// no other vowel marks. These are its spellings of the words in the bridge test sentence.
+const APPROVED = { عنّا: "عنّا", بزبّطلك: "بزبّطلك", هلّق: "هلّق", كرميلك: "كرميلك" };
+const TEST2 = "أهلين فيك! إيه أكيد، عنّا طاولة لأربعة بكرا الساعة تمانة. بزبّطلك ياها هلّق، شو الاسم كرميلك؟";
+const TEST2_SPOKEN = "أهلين فيك! إيه أكيد، عنّا طاولة لأربعة بكرا السيعة تمانة. بزبّطلك ياها هلّق، شو الاسم كرميلك؟";
+
+test("pronunciation layer: the bridge test sentence gets the approved script's marks for the same words, plus se3a", () => {
+  assert.deepEqual(lebaneseSpoken(TEST2), { text: TEST2_SPOKEN, changes: 1 });
+  const bare = TEST2.replace(/\u0651/g, "").replace("كرميلك", "كرمالك"); // the same sentence written without shadda, with كرمالك
+  const out = lebaneseSpoken(bare);
+  assert.equal(out.text, TEST2_SPOKEN, "marks restored exactly as approved");
+  for (const w of Object.values(APPROVED)) assert.ok(out.text.includes(w), w);
+  assert.equal(lebaneseSpoken(out.text).changes, 0, "idempotent");
+  for (const w of APPROVED_SHADDA) assert.ok(w.includes("\u0651"), `${w} carries shadda`);
+});
+
+test("pronunciation layer: clitics and every ساعة form; no false matches; ambiguous words untouched", () => {
+  const t = (s: string) => lebaneseSpoken(s).text;
+  assert.equal(t("الساعة ساعة بساعة للساعة بالساعة عالساعة والساعة"), "السيعة سيعة بسيعة للسيعة بالسيعة عالسيعة والسيعة");
+  assert.equal(t("السّاعة"), "السيعة", "already-marked spellings are matched too");
+  assert.equal(t("مساعدة ساعات ساعد الساعاتي"), "مساعدة ساعات ساعد الساعاتي");
+  assert.equal(t("هم وأي حد منك جد"), "هم وأي حد منك جد");
+  assert.equal(t("بدك وبدي، كل يوم، نص ساعة، يلا"), "بدّك وبدّي، كلّ يوم، نصّ سيعة، يلّا");
+  assert.equal(t("Hello الساعة 8"), "Hello السيعة 8");
+});
+
+test("pronunciation layer: spoken copy only; the stored and fallback text keep the agent's spelling; off without the Lebanese dialect", async () => {
+  const run = async (env: Record<string, string>) => {
+    const { h, elBodies } = elHarness(env);
+    await activate(h);
+    await post(h, voiceNoteIn("wamid.IN1"));
+    const c: any = await claimConversation(h.ctx, cid());
+    await getHistory(h.ctx, cid(), c.lease);
+    const r: any = await sendReply(h.ctx, { conversation_id: cid(), lease: c.lease, text: TEST2 });
+    assert.equal(r.sent_as, "voice");
+    assert.equal((await getConv(h)).messages.filter((m) => m.dir === "out")[0]!.text, TEST2, "stored text unchanged");
+    return elBodies[0].text as string;
+  };
+  assert.equal(await run({ ELEVENLABS_ACCENT_TAG: "0" }), TEST2_SPOKEN);
+  assert.equal(await run({ ELEVENLABS_ACCENT_TAG: "0", ARABIC_REPLY_DIALECT: "none" }), TEST2);
 });

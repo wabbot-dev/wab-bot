@@ -113,6 +113,16 @@ Gulf or generic Levantine phrasing. The `send_reply` tool description and the wa
 and a short, natural reply with no lists, links, emojis, markdown or brackets. `ARABIC_REPLY_DIALECT=none` turns the hint (and the
 accent direction) off. Typed replies are not affected. The hint is advice to the agent; the bridge does not rewrite the text.
 
+## Pronunciation layer
+
+Right before an Arabic reply goes to ElevenLabs with the Lebanese dialect on (`ARABIC_REPLY_DIALECT=lebanese`), the bridge respells the **spoken copy** ([lib/voice-pronounce.ts](../lib/voice-pronounce.ts)). The reply text that is stored, shown in history and sent as a text fallback is never changed.
+
+- **Approved spelling.** The owner's approved studio script for this voice marked doubled consonants with shadda (ّ) and used no other vowel marks. When a reply writes one of that script's words without the shadda, it is added back: هلق → هلّق، بدك → بدّك، عنا → عنّا، قديش → قدّيش، قلي → قلّي، كل → كلّ، نص → نصّ، مرة → مرّة، يلا → يلّا، ستة → ستّة، بزبطلك → بزبّطلك، تجرب → تجرّب، and the rest of the list in the file. Words whose bare spelling is ambiguous (هم، أي، حد، جد، منك) are left alone.
+- **Respellings**, each A/B-tested on the voice first: الساعة / ساعة → السيعة / سيعة (Beiruti "se3a", not "sa3a"), كرمالك → كرميلك.
+- Words match whole, with clitics in front (و ف ب ل ع ك ال لل بال عال), whether or not they already carry marks: بالساعة → بالسيعة, but مساعدة and ساعات are untouched.
+- `voice_pronounce` logs how many words changed, never the text. The spoken-length cap counts the respelled copy.
+- The `arabic_style` hint also asks the agent to write the same shadda itself; the layer makes it hold either way.
+
 ## The encoder and the CPU budget
 
 - `lib/wasm/voice-opus.wasm` (about 410 KB, about 190 KB gzipped) is built from **libopus 1.5.2** (BSD-3-Clause), the **speexdsp 1.2.1**

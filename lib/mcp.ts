@@ -76,7 +76,7 @@ const TOOLS: Tool[] = [
       "Voice notes (only if the owner turned VOICE_REPLIES on): reply_as \"auto\" (default) speaks the text when the customer's latest message was a voice note, \"voice\" asks for it (mode `on` only), \"text\" never speaks. " +
       "The text is always stored; if speaking fails, the text is too long, or the language has no voice (Arabic without VOICE_REPLY_PROVIDER=elevenlabs, for example) the text is sent instead and the result says sent_as \"text\" with voice_fallback. " +
       "When get_history returns voice_reply.expected true, your text will be SPOKEN: keep it short (under voice_reply.max_chars), no links, lists or emojis, and if it is Arabic follow voice_reply.arabic_style " +
-      "(by default colloquial Beiruti Lebanese as people talk, in Arabic script, never formal فصحى and not Syrian or generic Levantine: أهلين فيك، كيفك، نحنا هون كرميلك، هلّق، شو بتحب، بزبّطلك ياها، تكرم عينك، لكان، يسلملي قلبك; مش never مو; never منشان or كرمالك; numbers as spoken words like تمانة).",
+      "(by default colloquial Beiruti Lebanese as people talk, in Arabic script, never formal فصحى and not Syrian or generic Levantine: أهلين فيك، كيفك، نحنا هون كرميلك، هلّق، شو بتحب، بزبّطلك ياها، تكرم عينك، لكان، يسلملي قلبك; مش never مو; never منشان or كرمالك; numbers as spoken words like تمانة; shadda on doubled letters like هلّق، بدّك، عنّا، كلّ, no other vowel marks).",
     inputSchema: obj(
       {
         conversation_id: convSchema,

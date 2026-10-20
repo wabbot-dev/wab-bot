@@ -14,6 +14,7 @@ import { fetchTimeout, type Ctx } from "./ctx";
 import { aiErrorCode, oggOpusSeconds, recordCounts, type AiRunner, type MediaCounts } from "./media";
 import type { Config } from "./config";
 import { speakElevenLabs } from "./tts-elevenlabs";
+import { lebaneseSpoken } from "./voice-pronounce";
 import { LEBANESE_ACCENT_TAG, spokenStyle, supportsAudioTags } from "./voice-style";
 import type { Conv, Msg } from "./types";
 
@@ -172,11 +173,15 @@ export async function synthesize(ctx: Ctx, text: string, lang: string, where: "d
   if (!provider) return { ok: false, code: `voice_language_unsupported_${lang}`.slice(0, 40), count: { voice_language_unsupported: 1 } };
   if (provider === "elevenlabs") {
     // a network call, not CPU work: it runs in this request (no Durable Object needed); the key goes to api.elevenlabs.io only
+    const lebanese = lang === "ar" && cfg.arabicReplyDialect === "lebanese";
+    // pronunciation layer: the SPOKEN copy only (approved-script shadda + verified respellings); the stored reply text is untouched
+    const p = lebanese ? lebaneseSpoken(text) : { text, changes: 0 };
+    if (p.changes) ctx.log("voice_pronounce", { lang, changes: p.changes });
     try {
       return await speakElevenLabs(ctx.fetch, {
-        text, apiKey: cfg.elevenlabsApiKey ?? "", voiceId: cfg.elevenlabsVoiceId ?? "", modelId: cfg.elevenlabsModelId,
+        text: p.text, apiKey: cfg.elevenlabsApiKey ?? "", voiceId: cfg.elevenlabsVoiceId ?? "", modelId: cfg.elevenlabsModelId,
         maxChars: cfg.elevenlabsMaxChars, maxSeconds: cfg.voiceMaxSeconds, timeoutMs: cfg.voiceTimeoutMs,
-        accentTag: lang === "ar" && cfg.arabicReplyDialect === "lebanese" && cfg.elevenlabsAccentTag && supportsAudioTags(cfg.elevenlabsModelId) ? LEBANESE_ACCENT_TAG : undefined,
+        accentTag: lebanese && cfg.elevenlabsAccentTag && supportsAudioTags(cfg.elevenlabsModelId) ? LEBANESE_ACCENT_TAG : undefined,
       });
     } catch {
       return { ok: false, code: "voice_tts_el_error", count: { voice_tts_failed: 1 } };

@@ -11,7 +11,8 @@ import type { ArabicReplyDialect } from "./config";
 export const LEBANESE_VOICE_STYLE = [
   "If this reply is in Arabic it will be SPOKEN as a voice note, so write it the way people TALK in Beirut: colloquial Beiruti Lebanese, in Arabic script, warm and casual, like a friendly person in a Beirut shop.",
   "Never formal or written Arabic (no فصحى), and not Syrian, Egyptian, Gulf or generic Levantine phrasing.",
-  "Use these Lebanese forms: أهلين فيك، كيفك، نحنا هون كرميلك، هلّق، شو بتحب، بدّك، عنّا، فيك، رح، منيح، بزبّطلك ياها، تكرم عينك، لكان، يسلملي قلبك، ولا يهمك.",
+  "Use these Lebanese forms: أهلين فيك، كيفك، نحنا هون كرميلك، هلّق، شو بتحب، بدّك، عنّا، فيك، رح، منيح، بزبّطلك ياها، تكرم عينك، لكان، يسلملي قلبك، ولا يهمّك.",
+  "Spell spoken words the way the approved Lebanese script does: put shadda (ّ) on doubled letters, as in هلّق، بدّك، عنّا، قدّيش، قلّي، كلّ، نصّ، مرّة، يلّا، ستّة، بزبّطلك، تجرّب؛ add no other vowel marks (no fatha, kasra or damma).",
   "Swap formal words for spoken ones: الآن → هلّق، ماذا → شو، نحن → نحنا، لدينا → عنّا، يمكنك → فيك، سوف → رح، جداً → كتير، شكراً → يسلملي قلبك، نعم → إيه؛ drop هل in questions.",
   "Negation is مش, never مو. Write كرميلك exactly like this (said kirmelak); never كرمالك, never منشان or مشان. Not Syrian شلونك or Egyptian عايز / إزيك.",
   "Write times and numbers as spoken Lebanese words, not digits: تمانة، تلاتة، عشرة، نصّ ساعة.",
